@@ -1,3 +1,6 @@
+import streamlit as st
+from html import escape
+
 TERRA_CSS = """
 <style>
 .block-container { padding-top: 1.5rem; padding-bottom: 1rem; }
@@ -52,7 +55,6 @@ TERRA_CSS = """
 """
 
 def inject_css():
-    import streamlit as st
     st.markdown(TERRA_CSS, unsafe_allow_html=True)
 
 def kpi_card(label: str, value: str, color: str = "#4a9eff", icon: str = "") -> str:
@@ -61,14 +63,14 @@ def kpi_card(label: str, value: str, color: str = "#4a9eff", icon: str = "") -> 
     return f"""
     <div class="kpi-card" style="--accent:{color}">
         {icon_html}
-        <div class="kpi-value" style="color:{color};text-shadow:0 0 16px {color}55">{value}</div>
-        <div class="kpi-label">{label}</div>
+        <div class="kpi-value" style="color:{color};text-shadow:0 0 16px {color}55">{escape(str(value))}</div>
+        <div class="kpi-label">{escape(str(label))}</div>
     </div>
     """
 
 def bar_row(label: str, value: float, max_value: float, display: str, color_class: str = "blue") -> str:
     """Returns HTML for a horizontal bar row."""
-    pct = min(100, round(value / max_value * 100)) if max_value > 0 else 0
+    pct = max(0, min(100, round(value / max_value * 100))) if max_value > 0 else 0
     color_map = {
         "blue": "#4a9eff",
         "red": "#ff5070",
@@ -78,8 +80,8 @@ def bar_row(label: str, value: float, max_value: float, display: str, color_clas
     text_color = color_map.get(color_class, "#4a9eff")
     return f"""
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <div style="font-size:0.7rem;color:#4a6080;width:180px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{label}</div>
+        <div style="font-size:0.7rem;color:#4a6080;width:180px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{escape(str(label))}</div>
         <div class="bar-track" style="flex:1"><div class="bar-fill-{color_class}" style="width:{pct}%"></div></div>
-        <div style="font-size:0.75rem;font-weight:700;color:{text_color};min-width:60px;text-align:right">{display}</div>
+        <div style="font-size:0.75rem;font-weight:700;color:{text_color};min-width:60px;text-align:right">{escape(str(display))}</div>
     </div>
     """
