@@ -64,6 +64,37 @@ with c5:
 
 st.divider()
 
+# ─── Воронка отсева ───────────────────────────────────────────────────────────
+st.markdown("#### 📉 Воронка отсева")
+first = metrics["first_lesson_students"]
+last  = metrics["last_lesson_students"]
+dropped = first - last
+dropout_pct = metrics["dropout_pct"]
+
+funnel_html = f"""
+<div style="display:flex;align-items:center;gap:24px;padding:16px 0">
+  <div style="text-align:center;flex:1">
+    <div style="font-size:2.5rem;font-weight:800;color:#4a9eff">{first}</div>
+    <div style="font-size:0.65rem;color:#3a5070;text-transform:uppercase;letter-spacing:1px">Старт</div>
+  </div>
+  <div style="font-size:1.5rem;color:#1a2a40">→</div>
+  <div style="text-align:center;flex:2">
+    <div style="font-size:0.75rem;color:#ff5070;font-weight:700">−{escape(str(dropped))} чел. ({escape(str(dropout_pct))}%)</div>
+    <div style="background:#0f1828;border-radius:4px;height:6px;margin:8px 0;position:relative;overflow:hidden">
+      <div style="position:absolute;left:0;top:0;height:100%;width:{100 - dropout_pct:.0f}%;background:linear-gradient(90deg,#1a4080,#4a9eff)"></div>
+    </div>
+    <div style="font-size:0.65rem;color:#3a5070">Осталось {100 - dropout_pct:.0f}%</div>
+  </div>
+  <div style="font-size:1.5rem;color:#1a2a40">→</div>
+  <div style="text-align:center;flex:1">
+    <div style="font-size:2.5rem;font-weight:800;color:#40e090">{last}</div>
+    <div style="font-size:0.65rem;color:#3a5070;text-transform:uppercase;letter-spacing:1px">Финиш</div>
+  </div>
+</div>
+"""
+st.markdown(funnel_html, unsafe_allow_html=True)
+st.divider()
+
 # ─── Посещаемость и штрафы ───────────────────────────────────────────────────
 col_left, col_right = st.columns(2)
 
@@ -101,7 +132,29 @@ with col_right:
 st.divider()
 
 # ─── Минутка дарования ───────────────────────────────────────────────────────
-st.markdown("#### ✨ Минутка дарования по занятиям")
+st.markdown("#### ✨ Минутка дарования")
+
+avg_pct = metrics["avg_minutka_pct"]
+# Кольцевой график через CSS conic-gradient
+ring_pct = min(100, max(0, avg_pct))
+ring_color = "#40e090" if ring_pct >= 80 else "#ffa040" if ring_pct >= 50 else "#ff5070"
+ring_html = f"""
+<div style="display:flex;align-items:center;gap:24px;margin-bottom:16px">
+  <div style="position:relative;width:80px;height:80px;flex-shrink:0">
+    <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient({ring_color} 0% {ring_pct:.0f}%, #0f1828 {ring_pct:.0f}% 100%)"></div>
+    <div style="position:absolute;inset:8px;border-radius:50%;background:#060a12;display:flex;align-items:center;justify-content:center">
+      <span style="font-size:0.85rem;font-weight:800;color:{ring_color}">{avg_pct:.0f}%</span>
+    </div>
+  </div>
+  <div>
+    <div style="font-size:1rem;font-weight:700;color:{ring_color}">{avg_pct:.1f}%</div>
+    <div style="font-size:0.65rem;color:#3a5070;text-transform:uppercase;letter-spacing:1px">Средний % за поток</div>
+  </div>
+</div>
+"""
+st.markdown(ring_html, unsafe_allow_html=True)
+
+st.markdown("**По занятиям:**")
 ml = metrics["minutka_by_lesson"]
 if len(ml) > 0:
     bars_html = ""
