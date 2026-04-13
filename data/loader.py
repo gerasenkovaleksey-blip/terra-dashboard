@@ -57,7 +57,8 @@ def load_registry() -> pd.DataFrame:
     df["sheet_id"] = df[COL_URL].apply(
         lambda x: _extract_sheet_id(x) if pd.notna(x) else None
     )
-    return df[[COL_SCHOOL, COL_CLUSTER, COL_URL, "sheet_id"]].reset_index(drop=True)
+    result = df[[COL_SCHOOL, COL_CLUSTER, COL_URL, "sheet_id"]].reset_index(drop=True)
+    return result.rename(columns={COL_SCHOOL: "Школа"})
 
 # ─── МИНУТКА_ДАРОВАНИЯ ───────────────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ def load_fines(sheet_id: str) -> pd.DataFrame:
     df = df[pd.to_numeric(df["Поток"], errors="coerce").notna()].copy()
     df["Поток"] = df["Поток"].astype(int)
     df["Сумма штрафа"] = pd.to_numeric(df["Сумма штрафа"], errors="coerce").fillna(0)
-    df["Пункт правил"] = df["Пункт правил"].astype(str).str.strip()
+    df["Причина штрафа"] = df["Пункт правил"].astype(str).str.strip()
     return df.dropna(subset=["Поток"])
 
 # ─── Metrics ─────────────────────────────────────────────────────────────────
@@ -147,7 +148,7 @@ def school_metrics(minutka: pd.DataFrame, fines: pd.DataFrame, stream: int) -> d
 
     total_fines = float(f["Сумма штрафа"].sum())
     fines_by_reason = (
-        f.groupby("Пункт правил")["Сумма штрафа"]
+        f.groupby("Причина штрафа")["Сумма штрафа"]
         .sum()
         .sort_values(ascending=False)
     )
