@@ -9,7 +9,7 @@ inject_css()
 
 # ─── Sidebar ─────────────────────────────────────────────────────────────────
 registry = load_registry()
-school_names = registry["Школа"].tolist()  # "Школа", не "Название школы"
+school_names = registry["Школа"].tolist()
 
 with st.sidebar:
     st.markdown("### ⭕ TERRA")
@@ -19,16 +19,22 @@ school_row = registry[registry["Школа"] == selected_school].iloc[0]
 sheet_id   = school_row["sheet_id"]
 cluster    = school_row["Кластер"] if pd.notna(school_row["Кластер"]) else "—"
 
+if not sheet_id:
+    st.warning(f"Для школы «{selected_school}» не указана ссылка на таблицу.")
+    st.stop()
+
 minutka_df = load_minutka(sheet_id)
 fines_df   = load_fines(sheet_id)
 
-# Список потоков из реальных данных
 streams = sorted(
     minutka_df["Поток"].dropna().astype(int).unique().tolist(), reverse=True
 )
 
 with st.sidebar:
-    selected_stream = st.selectbox("Поток", streams if streams else [0])
+    if not streams:
+        st.warning("Нет данных по потокам")
+        st.stop()
+    selected_stream = st.selectbox("Поток", streams)
     if st.button("🔄 Обновить данные"):
         st.cache_data.clear()
         st.rerun()
@@ -64,14 +70,16 @@ with c5:
 
 st.divider()
 
-# ─── Воронка отсева ───────────────────────────────────────────────────────────
+# ─── Воронка отсева ──────────────────────────────────────────────────────────
 st.markdown("#### 📉 Воронка отсева")
 first = metrics["first_lesson_students"]
 last  = metrics["last_lesson_students"]
-dropped = first - last
 dropout_pct = metrics["dropout_pct"]
 
-funnel_html = f"""
+if first > 0:
+    dropped = first - last
+    remaining_pct = max(0, min(100, 100 - dropout_pct))
+    funnel_html = f"""
 <div style="display:flex;align-items:center;gap:24px;padding:16px 0">
   <div style="text-align:center;flex:1">
     <div style="font-size:2.5rem;font-weight:800;color:#4a9eff">{first}</div>
@@ -79,11 +87,11 @@ funnel_html = f"""
   </div>
   <div style="font-size:1.5rem;color:#1a2a40">→</div>
   <div style="text-align:center;flex:2">
-    <div style="font-size:0.75rem;color:#ff5070;font-weight:700">−{escape(str(dropped))} чел. ({escape(str(dropout_pct))}%)</div>
+    <div style="font-size:0.75rem;color:#ff5070;font-weight:700">−{dropped} чел. ({max(0, dropout_pct):.1f}%)</div>
     <div style="background:#0f1828;border-radius:4px;height:6px;margin:8px 0;position:relative;overflow:hidden">
-      <div style="position:absolute;left:0;top:0;height:100%;width:{100 - dropout_pct:.0f}%;background:linear-gradient(90deg,#1a4080,#4a9eff)"></div>
+      <div style="position:absolute;left:0;top:0;height:100%;width:{remaining_pct:.0f}%;background:linear-gradient(90deg,#1a4080,#4a9eff)"></div>
     </div>
-    <div style="font-size:0.65rem;color:#3a5070">Осталось {100 - dropout_pct:.0f}%</div>
+    <div style="font-size:0.65rem;color:#3a5070">Осталось {remaining_pct:.0f}%</div>
   </div>
   <div style="font-size:1.5rem;color:#1a2a40">→</div>
   <div style="text-align:center;flex:1">
@@ -92,15 +100,18 @@ funnel_html = f"""
   </div>
 </div>
 """
-st.markdown(funnel_html, unsafe_allow_html=True)
+    st.markdown(funnel_html, unsafe_allow_html=True)
+else:
+    st.info("Нет данных по посещаемости за этот поток")
+
 st.divider()
 
 # ─── Посещаемость и штрафы ───────────────────────────────────────────────────
 col_left, col_right = st.columns(2)
+ml = metrics["minutka_by_lesson"]
 
 with col_left:
     st.markdown("#### 📊 Посещаемость по занятиям")
-    ml = metrics["minutka_by_lesson"]
     if len(ml) > 0:
         max_students = int(ml["Количество учеников в школе"].max())
         bars_html = ""
@@ -135,7 +146,6 @@ st.divider()
 st.markdown("#### ✨ Минутка дарования")
 
 avg_pct = metrics["avg_minutka_pct"]
-# Кольцевой график через CSS conic-gradient
 ring_pct = min(100, max(0, avg_pct))
 ring_color = "#40e090" if ring_pct >= 80 else "#ffa040" if ring_pct >= 50 else "#ff5070"
 ring_html = f"""
@@ -155,7 +165,6 @@ ring_html = f"""
 st.markdown(ring_html, unsafe_allow_html=True)
 
 st.markdown("**По занятиям:**")
-ml = metrics["minutka_by_lesson"]
 if len(ml) > 0:
     bars_html = ""
     for _, row in ml.iterrows():
