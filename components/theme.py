@@ -77,11 +77,12 @@ def bar_row(label: str, value: float, max_value: float, display: str, color_clas
         "green": "#40e090",
         "orange": "#ffa040",
     }
-    text_color = color_map.get(color_class, "#4a9eff")
+    safe_color = color_class if color_class in color_map else "blue"
+    text_color = color_map[safe_color]
     return f"""
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <div style="font-size:0.7rem;color:#4a6080;width:180px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{escape(str(label))}</div>
-        <div class="bar-track" style="flex:1"><div class="bar-fill-{color_class}" style="width:{pct}%"></div></div>
+        <div class="bar-track" style="flex:1"><div class="bar-fill-{safe_color}" style="width:{pct}%"></div></div>
         <div style="font-size:0.75rem;font-weight:700;color:{text_color};min-width:60px;text-align:right">{escape(str(display))}</div>
     </div>
     """

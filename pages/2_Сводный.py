@@ -10,18 +10,20 @@ inject_css()
 # ─── Sidebar ─────────────────────────────────────────────────────────────────
 registry = load_registry()
 
+@st.cache_data(ttl=3600)
 def _get_all_streams() -> list[int]:
-    """Собираем все потоки из первой доступной школы."""
+    """Объединяем потоки из всех школ реестра."""
+    all_streams: set[int] = set()
     for _, row in registry.iterrows():
         sid = row["sheet_id"]
         if not sid:
             continue
         try:
             m = load_minutka(sid)
-            return sorted(m["Поток"].dropna().astype(int).unique().tolist(), reverse=True)
+            all_streams.update(m["Поток"].dropna().astype(int).unique().tolist())
         except Exception:
             continue
-    return []
+    return sorted(all_streams, reverse=True)
 
 with st.sidebar:
     st.markdown("### ⭕ TERRA")
@@ -71,7 +73,7 @@ if len(summary) == 0:
 # ─── KPI ─────────────────────────────────────────────────────────────────────
 total_start  = int(summary["Старт"].sum())
 total_finish = int(summary["Финиш"].sum())
-avg_dropout  = round(summary["Отсев %"].mean(), 1) if len(summary) > 0 else 0.0
+avg_dropout  = round(summary["Отсев %"].mean(), 1)
 total_fines  = int(summary["Штрафы ₽"].sum())
 
 c1, c2, c3, c4, c5 = st.columns(5)
