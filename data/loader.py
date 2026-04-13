@@ -187,7 +187,7 @@ def load_all_schools_summary(stream: int) -> pd.DataFrame:
                 continue
             metrics = school_metrics(m, f, stream)
             rows.append({
-                "Школа":     school_row[COL_SCHOOL],
+                "Школа":     school_row["Школа"],
                 "Кластер":   school_row[COL_CLUSTER],
                 "Старт":     metrics["first_lesson_students"],
                 "Финиш":     metrics["last_lesson_students"],
