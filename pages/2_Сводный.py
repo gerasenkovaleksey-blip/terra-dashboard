@@ -34,6 +34,9 @@ with st.sidebar:
     clusters = ["Все кластеры"] + sorted(registry["Кластер"].dropna().unique().tolist())
     selected_cluster = st.selectbox("Кластер", clusters)
 
+    school_names_list = ["Все школы"] + sorted(registry["Школа"].dropna().unique().tolist())
+    selected_school_filter = st.selectbox("Школа", school_names_list)
+
     if st.button("🔄 Обновить данные"):
         st.cache_data.clear()
         st.rerun()
@@ -44,6 +47,8 @@ with st.spinner("Загрузка данных всех школ..."):
 
 if selected_cluster != "Все кластеры":
     summary = summary[summary["Кластер"] == selected_cluster]
+if selected_school_filter != "Все школы":
+    summary = summary[summary["Школа"] == selected_school_filter]
 
 # ─── Заголовок ───────────────────────────────────────────────────────────────
 cluster_label = escape(selected_cluster) if selected_cluster != "Все кластеры" else "Все кластеры"
@@ -66,7 +71,7 @@ if len(summary) == 0:
 # ─── KPI ─────────────────────────────────────────────────────────────────────
 total_start  = int(summary["Старт"].sum())
 total_finish = int(summary["Финиш"].sum())
-avg_dropout  = round((total_start - total_finish) / total_start * 100, 1) if total_start > 0 else 0.0
+avg_dropout  = round(summary["Отсев %"].mean(), 1) if len(summary) > 0 else 0.0
 total_fines  = int(summary["Штрафы ₽"].sum())
 
 c1, c2, c3, c4, c5 = st.columns(5)
@@ -104,7 +109,7 @@ with col_left:
     bars_html = ""
     for _, row in sorted_dropout.iterrows():
         val = row["Отсев %"]
-        color = "red" if val > 25 else "orange" if val > 15 else "green"
+        color = "red" if val >= 25 else "orange" if val >= 15 else "green"
         bars_html += bar_row(row["Школа"], val, max_d, f"{val}%", color)
     st.markdown(bars_html, unsafe_allow_html=True)
 
