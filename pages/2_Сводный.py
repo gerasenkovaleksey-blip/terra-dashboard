@@ -58,8 +58,8 @@ st.markdown(f"""
 <div class="terra-header">
   <div class="terra-ring"></div>
   <div>
-    <div style="font-size:1.2rem;font-weight:700;color:#f0f4ff">Сводный дашборд</div>
-    <div style="font-size:0.65rem;color:#4a9eff;letter-spacing:2px;text-transform:uppercase">
+    <div style="font-size:1.2rem;font-weight:700;color:#1e293b">Сводный дашборд</div>
+    <div style="font-size:0.65rem;color:#2563eb;letter-spacing:2px;text-transform:uppercase">
         {cluster_label} · Поток {selected_stream}
     </div>
   </div>
@@ -78,15 +78,15 @@ total_fines  = int(summary["Штрафы ₽"].sum())
 
 c1, c2, c3, c4, c5 = st.columns(5)
 with c1:
-    st.markdown(kpi_card("Школ в потоке", str(len(summary)), "#4a9eff", "🏫"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Школ в потоке", str(len(summary)), "#2563eb", "🏫"), unsafe_allow_html=True)
 with c2:
-    st.markdown(kpi_card("Учеников на старте", str(total_start), "#4a9eff", "👥"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Учеников на старте", str(total_start), "#2563eb", "👥"), unsafe_allow_html=True)
 with c3:
-    st.markdown(kpi_card("Дошли до финала", str(total_finish), "#40e090", "🎓"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Дошли до финала", str(total_finish), "#22c55e", "🎓"), unsafe_allow_html=True)
 with c4:
-    st.markdown(kpi_card("Средний отсев", f"{avg_dropout}%", "#ff5070", "📉"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Средний отсев", f"{avg_dropout}%", "#ef4444", "📉"), unsafe_allow_html=True)
 with c5:
-    st.markdown(kpi_card("Штрафы всего", f"{total_fines:,}₽".replace(",", "\u00a0"), "#ffa040", "⚠️"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Штрафы всего", f"{total_fines:,}₽".replace(",", "\u00a0"), "#f97316", "⚠️"), unsafe_allow_html=True)
 
 st.divider()
 

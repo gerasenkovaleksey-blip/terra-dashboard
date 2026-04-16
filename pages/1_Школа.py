@@ -46,8 +46,8 @@ st.markdown(f"""
 <div class="terra-header">
   <div class="terra-ring"></div>
   <div>
-    <div style="font-size:1.2rem;font-weight:700;color:#f0f4ff">{escape(selected_school)}</div>
-    <div style="font-size:0.65rem;color:#4a9eff;letter-spacing:2px;text-transform:uppercase">
+    <div style="font-size:1.2rem;font-weight:700;color:#1e293b">{escape(selected_school)}</div>
+    <div style="font-size:0.65rem;color:#2563eb;letter-spacing:2px;text-transform:uppercase">
         Кластер: {escape(str(cluster))} · Поток {selected_stream}
     </div>
   </div>
@@ -57,16 +57,16 @@ st.markdown(f"""
 # ─── KPI карточки ────────────────────────────────────────────────────────────
 c1, c2, c3, c4, c5 = st.columns(5)
 with c1:
-    st.markdown(kpi_card("Пришли на 1-е занятие", str(metrics["first_lesson_students"]), "#4a9eff", "👥"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Пришли на 1-е занятие", str(metrics["first_lesson_students"]), "#2563eb", "👥"), unsafe_allow_html=True)
 with c2:
-    st.markdown(kpi_card("Дошли до последнего", str(metrics["last_lesson_students"]), "#4a9eff", "🎓"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Дошли до последнего", str(metrics["last_lesson_students"]), "#2563eb", "🎓"), unsafe_allow_html=True)
 with c3:
-    st.markdown(kpi_card("% отсева", f"{metrics['dropout_pct']}%", "#ff5070", "📉"), unsafe_allow_html=True)
+    st.markdown(kpi_card("% отсева", f"{metrics['dropout_pct']}%", "#ef4444", "📉"), unsafe_allow_html=True)
 with c4:
     total = int(metrics["total_fines"])
-    st.markdown(kpi_card("Сумма штрафов", f"{total:,}₽".replace(",", "\u00a0"), "#ffa040", "⚠️"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Сумма штрафов", f"{total:,}₽".replace(",", "\u00a0"), "#f97316", "⚠️"), unsafe_allow_html=True)
 with c5:
-    st.markdown(kpi_card("Минутка дарования", f"{metrics['avg_minutka_pct']}%", "#40e090", "✨"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Минутка дарования", f"{metrics['avg_minutka_pct']}%", "#22c55e", "✨"), unsafe_allow_html=True)
 
 st.divider()
 
@@ -82,21 +82,21 @@ if first > 0:
     funnel_html = f"""
 <div style="display:flex;align-items:center;gap:24px;padding:16px 0">
   <div style="text-align:center;flex:1">
-    <div style="font-size:2.5rem;font-weight:800;color:#4a9eff">{first}</div>
-    <div style="font-size:0.65rem;color:#3a5070;text-transform:uppercase;letter-spacing:1px">Старт</div>
+    <div style="font-size:2.5rem;font-weight:800;color:#2563eb">{first}</div>
+    <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:1px">Старт</div>
   </div>
-  <div style="font-size:1.5rem;color:#1a2a40">→</div>
+  <div style="font-size:1.5rem;color:#cbd5e1">→</div>
   <div style="text-align:center;flex:2">
-    <div style="font-size:0.75rem;color:#ff5070;font-weight:700">−{dropped} чел. ({max(0, dropout_pct):.1f}%)</div>
-    <div style="background:#0f1828;border-radius:4px;height:6px;margin:8px 0;position:relative;overflow:hidden">
-      <div style="position:absolute;left:0;top:0;height:100%;width:{remaining_pct:.0f}%;background:linear-gradient(90deg,#1a4080,#4a9eff)"></div>
+    <div style="font-size:0.75rem;color:#ef4444;font-weight:700">−{dropped} чел. ({max(0, dropout_pct):.1f}%)</div>
+    <div style="background:#e2e8f0;border-radius:4px;height:6px;margin:8px 0;position:relative;overflow:hidden">
+      <div style="position:absolute;left:0;top:0;height:100%;width:{remaining_pct:.0f}%;background:linear-gradient(90deg,#1d4ed8,#60a5fa)"></div>
     </div>
-    <div style="font-size:0.65rem;color:#3a5070">Осталось {remaining_pct:.0f}%</div>
+    <div style="font-size:0.65rem;color:#94a3b8">Осталось {remaining_pct:.0f}%</div>
   </div>
-  <div style="font-size:1.5rem;color:#1a2a40">→</div>
+  <div style="font-size:1.5rem;color:#cbd5e1">→</div>
   <div style="text-align:center;flex:1">
-    <div style="font-size:2.5rem;font-weight:800;color:#40e090">{last}</div>
-    <div style="font-size:0.65rem;color:#3a5070;text-transform:uppercase;letter-spacing:1px">Финиш</div>
+    <div style="font-size:2.5rem;font-weight:800;color:#22c55e">{last}</div>
+    <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:1px">Финиш</div>
   </div>
 </div>
 """
@@ -133,8 +133,8 @@ with col_right:
                 bars_html += bar_row(reason, amount, total_f or 1, f"{int(amount):,}₽".replace(",", "\u00a0"), "orange")
         st.markdown(bars_html, unsafe_allow_html=True)
         st.markdown(
-            f"<div style='margin-top:12px;font-size:0.7rem;color:#3a5070'>Итого: "
-            f"<b style='color:#ffa040'>{int(total_f):,}₽</b></div>".replace(",", "\u00a0"),
+            f"<div style='margin-top:12px;font-size:0.7rem;color:#64748b'>Итого: "
+            f"<b style='color:#f97316'>{int(total_f):,}₽</b></div>".replace(",", "\u00a0"),
             unsafe_allow_html=True
         )
     else:
@@ -147,18 +147,18 @@ st.markdown("#### ✨ Минутка дарования")
 
 avg_pct = metrics["avg_minutka_pct"]
 ring_pct = min(100, max(0, avg_pct))
-ring_color = "#40e090" if ring_pct >= 80 else "#ffa040" if ring_pct >= 50 else "#ff5070"
+ring_color = "#22c55e" if ring_pct >= 80 else "#f97316" if ring_pct >= 50 else "#ef4444"
 ring_html = f"""
 <div style="display:flex;align-items:center;gap:24px;margin-bottom:16px">
   <div style="position:relative;width:80px;height:80px;flex-shrink:0">
-    <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient({ring_color} 0% {ring_pct:.0f}%, #0f1828 {ring_pct:.0f}% 100%)"></div>
-    <div style="position:absolute;inset:8px;border-radius:50%;background:#060a12;display:flex;align-items:center;justify-content:center">
+    <div style="width:80px;height:80px;border-radius:50%;background:conic-gradient({ring_color} 0% {ring_pct:.0f}%, #e2e8f0 {ring_pct:.0f}% 100%)"></div>
+    <div style="position:absolute;inset:8px;border-radius:50%;background:#ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
       <span style="font-size:0.85rem;font-weight:800;color:{ring_color}">{avg_pct:.0f}%</span>
     </div>
   </div>
   <div>
     <div style="font-size:1rem;font-weight:700;color:{ring_color}">{avg_pct:.1f}%</div>
-    <div style="font-size:0.65rem;color:#3a5070;text-transform:uppercase;letter-spacing:1px">Средний % за поток</div>
+    <div style="font-size:0.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:1px">Средний % за поток</div>
   </div>
 </div>
 """
