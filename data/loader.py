@@ -68,9 +68,9 @@ def _parse_sheet(spreadsheet_id: str, sheet_name: str) -> pd.DataFrame:
     # Если все колонки — Unnamed, ищем строку-заголовок в первых 5 строках
     if all(str(c).startswith("Unnamed:") for c in df.columns):
         for i in range(min(5, len(df))):
-            candidate = df.iloc[i].astype(str).str.strip()
-            if not all(v.startswith("Unnamed:") or v == "nan" for v in candidate):
-                df.columns = candidate.values
+            candidate = [str(v).strip() for v in df.iloc[i].tolist()]
+            if not all(v.startswith("Unnamed:") or v in ("nan", "") for v in candidate):
+                df.columns = candidate
                 df = df.iloc[i + 1:].reset_index(drop=True)
                 break
     # Всегда приводим имена колонок к строкам (защита от float/int имён из XLSX)
