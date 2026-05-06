@@ -24,6 +24,7 @@ SCHOOL_SHEET_OVERRIDES: dict[str, str] = {
     "Торги по банкротству":           "1LAsbORfHfNjWvSJuztufvWB3DgXA2Cx6tK454XInmcU",
     "В2В бизнеса через логистику":    "1qxSGwWw5MBoCdxqeqOPPgpiQ4ykTN5M9IVHgOr_tk3w",
     "Автоматизации и ИИ":             "1yaRtL8enVIbFOV3hy4hybAsJZLBOm4w_0OUe0dKcMKA",
+    "Школа эффективного продвижения": "1sp09DkQNRQk5_mcy4xLiDCB1fNjXto_iFXh7URYhYOE",
 }
 
 # ─── Исправления опечаток в названиях кластеров ───────────────────────────────
