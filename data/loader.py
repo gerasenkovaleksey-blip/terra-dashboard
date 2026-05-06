@@ -26,6 +26,13 @@ SCHOOL_SHEET_OVERRIDES: dict[str, str] = {
     "Автоматизации и ИИ":             "1yaRtL8enVIbFOV3hy4hybAsJZLBOm4w_0OUe0dKcMKA",
 }
 
+# ─── Исправления опечаток в названиях кластеров ───────────────────────────────
+# Если в реестре встречаются опечатки в названии кластера — указываем исправление здесь.
+# Опечатка (после strip) → правильное название.
+CLUSTER_NAME_FIXES: dict[str, str] = {
+    # Пример: "Стретегия": "Стратегия",
+}
+
 # ─── Utilities ───────────────────────────────────────────────────────────────
 
 def _read_csv_utf8(url: str) -> pd.DataFrame:
@@ -67,6 +74,13 @@ def load_registry() -> pd.DataFrame:
     url = f"https://docs.google.com/spreadsheets/d/{REGISTRY_ID}/export?format=csv&gid=0"
     df = _read_csv_utf8(url)
     df = df[df[COL_SCHOOL].notna() & (df[COL_SCHOOL].str.strip() != "")].copy()
+    # Нормализуем пробелы в названиях школ и кластеров
+    df[COL_SCHOOL]   = df[COL_SCHOOL].str.strip()
+    df[COL_CLUSTER]  = df[COL_CLUSTER].str.strip()
+    # Применяем исправления опечаток в кластерах
+    df[COL_CLUSTER]  = df[COL_CLUSTER].map(
+        lambda x: CLUSTER_NAME_FIXES.get(x, x) if pd.notna(x) else x
+    )
     df["sheet_id"] = df[COL_URL].apply(
         lambda x: _extract_sheet_id(x) if pd.notna(x) else None
     )
