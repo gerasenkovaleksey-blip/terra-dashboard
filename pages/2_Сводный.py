@@ -140,8 +140,9 @@ half = (len(sorted_mk) + 1) // 2
 
 for i, (_, row) in enumerate(sorted_mk.iterrows()):
     col = cols[0] if i < half else cols[1]
+    mk_val = row["Минутка %"] if pd.notna(row["Минутка %"]) else 0.0
     with col:
         st.markdown(
-            bar_row(row["Школа"], row["Минутка %"], 100, f"{row['Минутка %']}%", "green"),
+            bar_row(row["Школа"], mk_val, 100, f"{mk_val}%", "green"),
             unsafe_allow_html=True
         )

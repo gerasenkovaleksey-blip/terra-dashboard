@@ -73,6 +73,9 @@ def kpi_card(label: str, value: str, color: str = "#2563eb", icon: str = "") -> 
 
 def bar_row(label: str, value: float, max_value: float, display: str, color_class: str = "blue") -> str:
     """Returns HTML for a horizontal bar row."""
+    import math
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        value = 0.0
     pct = max(0, min(100, round(value / max_value * 100))) if max_value > 0 else 0
     color_map = {
         "blue":   "#2563eb",
