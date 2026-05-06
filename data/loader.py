@@ -213,6 +213,27 @@ _FINE_REASON_ALIASES = [
     "Описание",
 ]
 
+# ─── Нормализация причин штрафов ─────────────────────────────────────────────
+# Порядок важен: первое совпадение ключевого слова (без регистра) выигрывает.
+# Добавляй новые ключевые слова в нужную группу по мере появления в данных.
+FINE_REASON_GROUPS: list[tuple[list[str], str]] = [
+    (["дз", "домашк", "не сдал", "не сдала", "задани"],  "ДЗ"),
+    (["отчет", "отчёт"],                                  "Отчёт"),
+    (["опоздани", "опездани"],                            "Опоздание на занятие"),
+    (["телефон", "гаджет", "трекшен", "сигнал"],          "Телефон"),
+    (["контролер", "контролёр"],                          "Контролер"),
+    (["бадди"],                                           "За бадди"),
+]
+
+def _normalize_fine_reason(reason: str) -> str:
+    """Map a raw fine reason string to a normalized group name."""
+    r = reason.lower().strip()
+    for keywords, group in FINE_REASON_GROUPS:
+        if any(kw in r for kw in keywords):
+            return group
+    return reason  # не попало ни в одну группу — оставляем как есть
+
+
 @st.cache_data(ttl=3600)
 def load_fines(sheet_id: str) -> pd.DataFrame:
     """
@@ -230,7 +251,9 @@ def load_fines(sheet_id: str) -> pd.DataFrame:
     df["Сумма штрафа"] = pd.to_numeric(df[amount_col], errors="coerce").fillna(0)
 
     reason_col = _find_col(df, _FINE_REASON_ALIASES, "Причина штрафа")
-    df["Причина штрафа"] = df[reason_col].astype(str).str.strip()
+    df["Причина штрафа"] = (
+        df[reason_col].astype(str).str.strip().apply(_normalize_fine_reason)
+    )
     return df.dropna(subset=["Поток"])
 
 # ─── Metrics ─────────────────────────────────────────────────────────────────
