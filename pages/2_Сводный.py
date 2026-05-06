@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from html import escape
 from components.theme import inject_css, kpi_card, bar_row
-from data.loader import load_registry, load_minutka, load_all_schools_summary
+from data.loader import load_registry, load_minutka, load_all_schools_summary, load_all_fines_detail
 
 st.set_page_config(page_title="TERRA · Сводный", page_icon="📊", layout="wide")
 inject_css()
@@ -146,3 +146,50 @@ for i, (_, row) in enumerate(sorted_mk.iterrows()):
             bar_row(row["Школа"], mk_val, 100, f"{mk_val}%", "green"),
             unsafe_allow_html=True
         )
+
+st.divider()
+
+# ─── Штрафы по причинам (все школы) ─────────────────────────────────────────
+st.markdown("#### 📋 Штрафы по причинам")
+
+fines_detail = load_all_fines_detail(selected_stream)
+
+# Применяем те же фильтры, что и для summary
+if selected_cluster != "Все кластеры" and len(fines_detail) > 0:
+    fines_detail = fines_detail[fines_detail["Кластер"] == selected_cluster]
+if selected_school_filter != "Все школы" and len(fines_detail) > 0:
+    fines_detail = fines_detail[fines_detail["Школа"] == selected_school_filter]
+
+if len(fines_detail) > 0:
+    by_reason = (
+        fines_detail.groupby("Причина штрафа")["Сумма штрафа"]
+        .sum()
+        .sort_values(ascending=False)
+    )
+    # Фильтруем нулевые и мусорные значения
+    by_reason = by_reason[
+        (by_reason > 0) &
+        (~by_reason.index.str.lower().isin(["nan", "none", "", "-"]))
+    ]
+
+    if len(by_reason) > 0:
+        max_reason = by_reason.max()
+        col_l, col_r = st.columns(2)
+        half_r = (len(by_reason) + 1) // 2
+        bars_html_l = bars_html_r = ""
+        for i, (reason, amount) in enumerate(by_reason.items()):
+            html = bar_row(reason, amount, max_reason,
+                           f"{int(amount):,}₽".replace(",", " "), "orange")
+            if i < half_r:
+                bars_html_l += html
+            else:
+                bars_html_r += html
+        with col_l:
+            st.markdown(bars_html_l, unsafe_allow_html=True)
+        with col_r:
+            if bars_html_r:
+                st.markdown(bars_html_r, unsafe_allow_html=True)
+    else:
+        st.success("Штрафов нет")
+else:
+    st.success("Штрафов нет")

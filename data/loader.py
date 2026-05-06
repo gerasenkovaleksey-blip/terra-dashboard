@@ -316,3 +316,35 @@ def load_all_schools_summary(stream: int) -> pd.DataFrame:
                            school_row.get("Школа", "?"), sid, e)
             continue
     return pd.DataFrame(rows)
+
+
+@st.cache_data(ttl=3600)
+def load_all_fines_detail(stream: int) -> pd.DataFrame:
+    """
+    Load raw fines for ALL schools for a given stream.
+    Returns DataFrame with columns: Школа, Кластер, Причина штрафа, Сумма штрафа.
+    Used for aggregated fines-by-reason breakdown in the summary dashboard.
+    """
+    registry = load_registry()
+    rows = []
+    for _, school_row in registry.iterrows():
+        sid = school_row["sheet_id"]
+        if not sid:
+            continue
+        try:
+            f = load_fines(sid)
+            f_stream = f[f["Поток"] == stream]
+            if len(f_stream) == 0:
+                continue
+            for _, fine_row in f_stream.iterrows():
+                rows.append({
+                    "Школа":          school_row["Школа"],
+                    "Кластер":        school_row[COL_CLUSTER],
+                    "Причина штрафа": fine_row["Причина штрафа"],
+                    "Сумма штрафа":   fine_row["Сумма штрафа"],
+                })
+        except Exception as e:
+            logger.warning("Ошибка штрафов школы %s (sheet_id=%s): %s",
+                           school_row.get("Школа", "?"), sid, e)
+            continue
+    return pd.DataFrame(rows, columns=["Школа", "Кластер", "Причина штрафа", "Сумма штрафа"])
