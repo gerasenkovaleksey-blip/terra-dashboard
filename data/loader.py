@@ -98,6 +98,22 @@ def load_registry() -> pd.DataFrame:
 # ─── МИНУТКА_ДАРОВАНИЯ ───────────────────────────────────────────────────────
 
 # Известные варианты названий колонок в МИНУТКА_ДАРОВАНИЯ
+_LESSON_COL_ALIASES = [
+    "Занятие",
+    "Занятия",
+    "№ занятия",
+    "№занятия",
+    "Урок",
+    "№",
+    "Номер занятия",
+    "Номер",
+]
+_STREAM_COL_ALIASES = [
+    "Поток",
+    "Потоки",
+    "№ потока",
+    "Номер потока",
+]
 _STUDENTS_COL_ALIASES = [
     "Количество учеников в школе",
     "Кол-во учеников в школе",
@@ -146,9 +162,12 @@ def load_minutka(sheet_id: str) -> pd.DataFrame:
     df = _parse_sheet(sheet_id, "МИНУТКА_ДАРОВАНИЯ")
     df.columns = df.columns.str.strip()
 
-    df = df[pd.to_numeric(df["Занятие"], errors="coerce").notna()].copy()
-    df["Занятие"] = df["Занятие"].astype(int)
-    df["Поток"]   = pd.to_numeric(df["Поток"], errors="coerce")
+    lesson_col = _find_col(df, _LESSON_COL_ALIASES, "Занятие")
+    stream_col = _find_col(df, _STREAM_COL_ALIASES, "Поток")
+
+    df = df[pd.to_numeric(df[lesson_col], errors="coerce").notna()].copy()
+    df["Занятие"] = df[lesson_col].astype(int)
+    df["Поток"]   = pd.to_numeric(df[stream_col], errors="coerce")
 
     students_col = _find_col(df, _STUDENTS_COL_ALIASES, "Количество учеников в школе")
     df["Количество учеников в школе"] = pd.to_numeric(df[students_col], errors="coerce")
@@ -185,8 +204,9 @@ def load_fines(sheet_id: str) -> pd.DataFrame:
     df = _parse_sheet(sheet_id, "ШТРАФЫ")
     df.columns = df.columns.str.strip()
 
-    df = df[pd.to_numeric(df["Поток"], errors="coerce").notna()].copy()
-    df["Поток"] = df["Поток"].astype(int)
+    stream_col = _find_col(df, _STREAM_COL_ALIASES, "Поток")
+    df = df[pd.to_numeric(df[stream_col], errors="coerce").notna()].copy()
+    df["Поток"] = df[stream_col].astype(int)
     df["Сумма штрафа"] = pd.to_numeric(df["Сумма штрафа"], errors="coerce").fillna(0)
     reason_col = "Причина штрафа" if "Причина штрафа" in df.columns else "Пункт правил"
     df["Причина штрафа"] = df[reason_col].astype(str).str.strip()
