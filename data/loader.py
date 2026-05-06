@@ -16,6 +16,16 @@ COL_SCHOOL  = "Название школы"
 COL_CLUSTER = "Кластер"
 COL_URL     = "Ссылка на таблицу с подробным описанием школы"
 
+# ─── Переопределения sheet_id ─────────────────────────────────────────────────
+# Если ссылка на таблицу школы изменилась, указываем новый sheet_id здесь.
+# Имя школы → новый sheet_id (приоритет над реестром).
+SCHOOL_SHEET_OVERRIDES: dict[str, str] = {
+    "Роста дохода на своих услугах":  "1ifJTmS0gBm4viTCGHHmIcnR5bciNN_hXcx01Kryp7_o",
+    "Торги по банкротству":           "1LAsbORfHfNjWvSJuztufvWB3DgXA2Cx6tK454XInmcU",
+    "В2В бизнеса через логистику":    "1qxSGwWw5MBoCdxqeqOPPgpiQ4ykTN5M9IVHgOr_tk3w",
+    "Автоматизации и ИИ":             "1yaRtL8enVIbFOV3hy4hybAsJZLBOm4w_0OUe0dKcMKA",
+}
+
 # ─── Utilities ───────────────────────────────────────────────────────────────
 
 def _read_csv_utf8(url: str) -> pd.DataFrame:
@@ -59,6 +69,11 @@ def load_registry() -> pd.DataFrame:
     df = df[df[COL_SCHOOL].notna() & (df[COL_SCHOOL].str.strip() != "")].copy()
     df["sheet_id"] = df[COL_URL].apply(
         lambda x: _extract_sheet_id(x) if pd.notna(x) else None
+    )
+    # Применяем переопределения sheet_id (приоритет над реестром)
+    df["sheet_id"] = df.apply(
+        lambda row: SCHOOL_SHEET_OVERRIDES.get(str(row[COL_SCHOOL]).strip(), row["sheet_id"]),
+        axis=1,
     )
     result = df[[COL_SCHOOL, COL_CLUSTER, COL_URL, "sheet_id"]].reset_index(drop=True)
     return result.rename(columns={COL_SCHOOL: "Школа"})
