@@ -47,6 +47,8 @@ def _load_workbook(spreadsheet_id: str) -> bytes:
     """Download XLSX once per school and cache the raw bytes."""
     url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=xlsx"
     resp = requests.get(url, timeout=30)
+    if not resp.ok:
+        logger.error("HTTP %s при загрузке sheet_id=%s — %s", resp.status_code, spreadsheet_id, url)
     resp.raise_for_status()
     return resp.content
 

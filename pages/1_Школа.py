@@ -23,8 +23,23 @@ if not sheet_id:
     st.warning(f"Для школы «{selected_school}» не указана ссылка на таблицу.")
     st.stop()
 
-minutka_df = load_minutka(sheet_id)
-fines_df   = load_fines(sheet_id)
+try:
+    minutka_df = load_minutka(sheet_id)
+    fines_df   = load_fines(sheet_id)
+except Exception as e:
+    err_str = str(e)
+    if "403" in err_str:
+        reason = "таблица не открыта для публичного доступа (403 Forbidden)"
+    elif "404" in err_str:
+        reason = "таблица не найдена — возможно, ссылка устарела (404 Not Found)"
+    else:
+        reason = err_str
+    st.error(
+        f"**Не удалось загрузить данные школы «{selected_school}»**\n\n"
+        f"Причина: {reason}\n\n"
+        f"`sheet_id: {sheet_id}`"
+    )
+    st.stop()
 
 streams = sorted(
     minutka_df["Поток"].dropna().astype(int).unique().tolist(), reverse=True
