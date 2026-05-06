@@ -195,6 +195,24 @@ def load_minutka(sheet_id: str) -> pd.DataFrame:
 
 # ─── ШТРАФЫ ──────────────────────────────────────────────────────────────────
 
+_FINE_AMOUNT_ALIASES = [
+    "Сумма штрафа",
+    "Сумма",
+    "Штраф",
+    "Размер штрафа",
+    "Сумма (руб)",
+    "Сумма (₽)",
+    "Сумма руб",
+]
+_FINE_REASON_ALIASES = [
+    "Причина штрафа",
+    "Пункт правил",
+    "Причина",
+    "За что",
+    "Нарушение",
+    "Описание",
+]
+
 @st.cache_data(ttl=3600)
 def load_fines(sheet_id: str) -> pd.DataFrame:
     """
@@ -207,8 +225,11 @@ def load_fines(sheet_id: str) -> pd.DataFrame:
     stream_col = _find_col(df, _STREAM_COL_ALIASES, "Поток")
     df = df[pd.to_numeric(df[stream_col], errors="coerce").notna()].copy()
     df["Поток"] = df[stream_col].astype(int)
-    df["Сумма штрафа"] = pd.to_numeric(df["Сумма штрафа"], errors="coerce").fillna(0)
-    reason_col = "Причина штрафа" if "Причина штрафа" in df.columns else "Пункт правил"
+
+    amount_col = _find_col(df, _FINE_AMOUNT_ALIASES, "Сумма штрафа")
+    df["Сумма штрафа"] = pd.to_numeric(df[amount_col], errors="coerce").fillna(0)
+
+    reason_col = _find_col(df, _FINE_REASON_ALIASES, "Причина штрафа")
     df["Причина штрафа"] = df[reason_col].astype(str).str.strip()
     return df.dropna(subset=["Поток"])
 
