@@ -61,6 +61,7 @@ def _parse_sheet(spreadsheet_id: str, sheet_name: str) -> pd.DataFrame:
     Parse a named sheet from the cached XLSX bytes.
     If the first row contains only Unnamed columns, scans up to 5 rows
     to find the real header row.
+    Always normalizes column names to strings.
     """
     xl = pd.ExcelFile(io.BytesIO(_load_workbook(spreadsheet_id)))
     df = xl.parse(sheet_name)
@@ -72,6 +73,8 @@ def _parse_sheet(spreadsheet_id: str, sheet_name: str) -> pd.DataFrame:
                 df.columns = candidate.values
                 df = df.iloc[i + 1:].reset_index(drop=True)
                 break
+    # Всегда приводим имена колонок к строкам (защита от float/int имён из XLSX)
+    df.columns = [str(c).strip() for c in df.columns]
     return df
 
 
@@ -155,7 +158,7 @@ _PCT_COL_ALIASES = [
 
 def _find_col(df: pd.DataFrame, aliases: list[str], fallback: str) -> str:
     """Return the first alias found in df.columns, or fallback (creating NaN column)."""
-    cols_lower = {c.lower(): c for c in df.columns}
+    cols_lower = {str(c).lower(): c for c in df.columns}
     for alias in aliases:
         if alias in df.columns:
             return alias
@@ -176,8 +179,7 @@ def load_minutka(sheet_id: str) -> pd.DataFrame:
     Handles both string "89,47%" format and decimal fraction 0.8947 from XLSX.
     Tolerates alternative column names via _find_col().
     """
-    df = _parse_sheet(sheet_id, "МИНУТКА_ДАРОВАНИЯ")
-    df.columns = df.columns.str.strip()
+    df = _parse_sheet(sheet_id, "МИНУТКА_ДАРОВАНИЯ")  # columns already stripped
 
     lesson_col = _find_col(df, _LESSON_COL_ALIASES, "Занятие")
     stream_col = _find_col(df, _STREAM_COL_ALIASES, "Поток")
@@ -257,8 +259,7 @@ def load_fines(sheet_id: str) -> pd.DataFrame:
     Load ШТРАФЫ sheet from an individual school spreadsheet.
     Drops rows with non-numeric Поток.
     """
-    df = _parse_sheet(sheet_id, "ШТРАФЫ")
-    df.columns = df.columns.str.strip()
+    df = _parse_sheet(sheet_id, "ШТРАФЫ")  # columns already stripped
 
     stream_col = _find_col(df, _STREAM_COL_ALIASES, "Поток")
     df = df[pd.to_numeric(df[stream_col], errors="coerce").notna()].copy()
