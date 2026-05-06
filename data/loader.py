@@ -244,8 +244,10 @@ FINE_REASON_GROUPS: list[tuple[list[str], str]] = [
     (["бадди"],                                           "За бадди"),
 ]
 
-def _normalize_fine_reason(reason: str) -> str:
+def _normalize_fine_reason(reason) -> str:
     """Map a raw fine reason string to a normalized group name."""
+    if not isinstance(reason, str):
+        reason = "" if (reason is None or (isinstance(reason, float) and reason != reason)) else str(reason)
     r = reason.lower().strip()
     for keywords, group in FINE_REASON_GROUPS:
         if any(kw in r for kw in keywords):
@@ -269,9 +271,7 @@ def load_fines(sheet_id: str) -> pd.DataFrame:
     df["Сумма штрафа"] = pd.to_numeric(df[amount_col], errors="coerce").fillna(0)
 
     reason_col = _find_col(df, _FINE_REASON_ALIASES, "Причина штрафа")
-    df["Причина штрафа"] = (
-        df[reason_col].astype(str).str.strip().apply(_normalize_fine_reason)
-    )
+    df["Причина штрафа"] = df[reason_col].apply(_normalize_fine_reason)
     return df.dropna(subset=["Поток"])
 
 # ─── Metrics ─────────────────────────────────────────────────────────────────
