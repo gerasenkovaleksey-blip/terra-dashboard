@@ -94,6 +94,43 @@ def load_registry() -> pd.DataFrame:
 
 # ─── МИНУТКА_ДАРОВАНИЯ ───────────────────────────────────────────────────────
 
+# Известные варианты названий колонок в МИНУТКА_ДАРОВАНИЯ
+_STUDENTS_COL_ALIASES = [
+    "Количество учеников в школе",
+    "Кол-во учеников в школе",
+    "Кол-во учеников",
+    "Количество учеников",
+    "Ученики в школе",
+    "Ученики",
+]
+_FORMS_COL_ALIASES = [
+    "Количество сданных форм",
+    "Кол-во сданных форм",
+    "Сданных форм",
+    "Форм сдано",
+]
+_PCT_COL_ALIASES = [
+    "Процент выполнения",
+    "% выполнения",
+    "Выполнение %",
+    "Выполнение",
+]
+
+
+def _find_col(df: pd.DataFrame, aliases: list[str], fallback: str) -> str:
+    """Return the first alias found in df.columns, or fallback (creating NaN column)."""
+    cols_lower = {c.lower(): c for c in df.columns}
+    for alias in aliases:
+        if alias in df.columns:
+            return alias
+        if alias.lower() in cols_lower:
+            return cols_lower[alias.lower()]
+    # Not found — create empty column so downstream dropna handles it gracefully
+    logger.warning("Колонка не найдена (искали: %s). Доступные: %s", aliases[0], list(df.columns))
+    df[fallback] = float("nan")
+    return fallback
+
+
 @st.cache_data(ttl=3600)
 def load_minutka(sheet_id: str) -> pd.DataFrame:
     """
@@ -101,6 +138,7 @@ def load_minutka(sheet_id: str) -> pd.DataFrame:
     Drops rows with non-numeric Занятие or missing student count.
     Normalizes Процент выполнения to percentage float (e.g. 89.47).
     Handles both string "89,47%" format and decimal fraction 0.8947 from XLSX.
+    Tolerates alternative column names via _find_col().
     """
     df = _parse_sheet(sheet_id, "МИНУТКА_ДАРОВАНИЯ")
     df.columns = df.columns.str.strip()
@@ -108,14 +146,16 @@ def load_minutka(sheet_id: str) -> pd.DataFrame:
     df = df[pd.to_numeric(df["Занятие"], errors="coerce").notna()].copy()
     df["Занятие"] = df["Занятие"].astype(int)
     df["Поток"]   = pd.to_numeric(df["Поток"], errors="coerce")
-    df["Количество учеников в школе"] = pd.to_numeric(
-        df["Количество учеников в школе"], errors="coerce"
-    )
-    df["Количество сданных форм"] = pd.to_numeric(
-        df["Количество сданных форм"], errors="coerce"
-    )
+
+    students_col = _find_col(df, _STUDENTS_COL_ALIASES, "Количество учеников в школе")
+    df["Количество учеников в школе"] = pd.to_numeric(df[students_col], errors="coerce")
+
+    forms_col = _find_col(df, _FORMS_COL_ALIASES, "Количество сданных форм")
+    df["Количество сданных форм"] = pd.to_numeric(df[forms_col], errors="coerce")
+
+    pct_col = _find_col(df, _PCT_COL_ALIASES, "Процент выполнения")
     # Handle both "89,47%" string format and 0.8947 decimal fraction from XLSX
-    pct_raw = df["Процент выполнения"]
+    pct_raw = df[pct_col]
     if pct_raw.dtype == object:
         pct = (
             pct_raw.astype(str)
