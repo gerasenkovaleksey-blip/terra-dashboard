@@ -50,14 +50,29 @@ def _load_workbook(spreadsheet_id: str) -> bytes:
     resp = requests.get(url, timeout=30)
     if not resp.ok:
         logger.error("HTTP %s при загрузке sheet_id=%s — %s", resp.status_code, spreadsheet_id, url)
+    if resp.status_code == 410:
+        raise ValueError(f"Таблица удалена навсегда (410 Gone). sheet_id={spreadsheet_id}")
     resp.raise_for_status()
     return resp.content
 
 
 def _parse_sheet(spreadsheet_id: str, sheet_name: str) -> pd.DataFrame:
-    """Parse a named sheet from the cached XLSX bytes."""
+    """
+    Parse a named sheet from the cached XLSX bytes.
+    If the first row contains only Unnamed columns, scans up to 5 rows
+    to find the real header row.
+    """
     xl = pd.ExcelFile(io.BytesIO(_load_workbook(spreadsheet_id)))
-    return xl.parse(sheet_name)
+    df = xl.parse(sheet_name)
+    # Если все колонки — Unnamed, ищем строку-заголовок в первых 5 строках
+    if all(str(c).startswith("Unnamed:") for c in df.columns):
+        for i in range(min(5, len(df))):
+            candidate = df.iloc[i].astype(str).str.strip()
+            if not all(v.startswith("Unnamed:") or v == "nan" for v in candidate):
+                df.columns = candidate.values
+                df = df.iloc[i + 1:].reset_index(drop=True)
+                break
+    return df
 
 
 def _extract_sheet_id(url: str) -> str | None:
@@ -116,7 +131,9 @@ _STREAM_COL_ALIASES = [
 ]
 _STUDENTS_COL_ALIASES = [
     "Количество учеников в школе",
+    "Количество учеников на занятии",
     "Кол-во учеников в школе",
+    "Кол-во учеников на занятии",
     "Кол-во учеников",
     "Количество учеников",
     "Ученики в школе",
