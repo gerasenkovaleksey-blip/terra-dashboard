@@ -3,7 +3,7 @@ from html import escape
 
 TERRA_CSS = """
 <style>
-.block-container { padding-top: 3.5rem; padding-bottom: 5rem; }
+.block-container { padding-top: 3.5rem !important; padding-bottom: 5rem !important; }
 
 /* KPI карточки — белые с цветной полосой сверху */
 .kpi-card {
