@@ -206,10 +206,17 @@ def load_minutka(sheet_id: str) -> pd.DataFrame:
         )
     else:
         pct = pd.to_numeric(pct_raw, errors="coerce")
-    # If all values are <= 1.0, treat as decimal fraction and convert to percentage
-    # (applies to both string and numeric source formats)
-    if pct.max(skipna=True) <= 1.0:
+    # Normalize decimal fractions to percentages.
+    # Case 1: all values <= 1.0 — pure decimal format, multiply everything by 100.
+    # Case 2: mixed format (some <= 1.0, some > 1.0) — XLSX stored some cells as
+    #         numeric fraction (1.0 = 100%) and others as string "100%". Multiply
+    #         only the fraction values by 100 to unify the column.
+    pct_max = pct.max(skipna=True)
+    has_fractions = ((pct > 0) & (pct <= 1.0)).any()
+    if pct_max <= 1.0:
         pct = pct * 100
+    elif has_fractions:
+        pct = pct.apply(lambda x: x * 100 if pd.notna(x) and 0 < x <= 1.0 else x)
     df["Процент выполнения"] = pct.round(2)
     return df.dropna(subset=["Поток", "Занятие", "Количество учеников в школе"])
 
