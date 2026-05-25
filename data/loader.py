@@ -170,6 +170,24 @@ def _find_col(df: pd.DataFrame, aliases: list[str], fallback: str) -> str:
     return fallback
 
 
+def _to_numeric_clean(series: pd.Series) -> pd.Series:
+    """
+    Convert a series to numeric, handling mixed cell types gracefully.
+    Strips non-numeric characters (e.g. "20 чел." → 20, "15 чел" → 15).
+    For pure numeric series, uses pd.to_numeric directly without string conversion.
+    """
+    if series.dtype == object:
+        cleaned = (
+            series.astype(str)
+            .str.strip()
+            .str.replace(r"[^\d.,]", "", regex=True)   # keep digits, dot, comma
+            .str.replace(",", ".", regex=False)          # "20,5" → "20.5"
+            .str.replace(r"\.(?=.*\.)", "", regex=True)  # remove extra dots if any
+        )
+        return pd.to_numeric(cleaned, errors="coerce")
+    return pd.to_numeric(series, errors="coerce")
+
+
 @st.cache_data(ttl=3600)
 def load_minutka(sheet_id: str) -> pd.DataFrame:
     """
@@ -189,10 +207,10 @@ def load_minutka(sheet_id: str) -> pd.DataFrame:
     df["Поток"]   = pd.to_numeric(df[stream_col], errors="coerce")
 
     students_col = _find_col(df, _STUDENTS_COL_ALIASES, "Количество учеников в школе")
-    df["Количество учеников в школе"] = pd.to_numeric(df[students_col], errors="coerce")
+    df["Количество учеников в школе"] = _to_numeric_clean(df[students_col])
 
     forms_col = _find_col(df, _FORMS_COL_ALIASES, "Количество сданных форм")
-    df["Количество сданных форм"] = pd.to_numeric(df[forms_col], errors="coerce")
+    df["Количество сданных форм"] = _to_numeric_clean(df[forms_col])
 
     pct_col = _find_col(df, _PCT_COL_ALIASES, "Процент выполнения")
     # Handle both "89,47%" string format and 0.8947 decimal fraction from XLSX
