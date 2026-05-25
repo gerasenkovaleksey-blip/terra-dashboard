@@ -206,9 +206,10 @@ def load_minutka(sheet_id: str) -> pd.DataFrame:
         )
     else:
         pct = pd.to_numeric(pct_raw, errors="coerce")
-        # If all values are <= 1.0, treat as decimal fraction and convert to percentage
-        if pct.max(skipna=True) <= 1.0:
-            pct = pct * 100
+    # If all values are <= 1.0, treat as decimal fraction and convert to percentage
+    # (applies to both string and numeric source formats)
+    if pct.max(skipna=True) <= 1.0:
+        pct = pct * 100
     df["Процент выполнения"] = pct.round(2)
     return df.dropna(subset=["Поток", "Занятие", "Количество учеников в школе"])
 
