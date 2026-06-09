@@ -220,7 +220,7 @@ if selected_school_filter != "Все школы" and len(fines_detail) > 0:
 
 if len(fines_detail) > 0:
     by_reason = (
-        fines_detail.groupby("Причина штрафа")["Сумма штрафа"]
+        fines_detail.groupby("Причина штрафа")["Сумма погашения"]
         .sum()
         .sort_values(ascending=False)
     )

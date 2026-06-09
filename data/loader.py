@@ -340,8 +340,9 @@ def school_metrics(minutka: pd.DataFrame, fines: pd.DataFrame, stream: int) -> d
 
     total_fines      = float(f["Сумма штрафа"].sum())
     total_fines_paid = float(f["Сумма погашения"].sum()) if "Сумма погашения" in f.columns else 0.0
+    _fbr_col = "Сумма погашения" if "Сумма погашения" in f.columns else "Сумма штрафа"
     fines_by_reason = (
-        f.groupby("Причина штрафа")["Сумма штрафа"]
+        f.groupby("Причина штрафа")[_fbr_col]
         .sum()
         .sort_values(ascending=False)
     )
@@ -427,13 +428,13 @@ def load_all_fines_detail(stream: int) -> pd.DataFrame:
                 continue
             for _, fine_row in f_stream.iterrows():
                 rows.append({
-                    "Школа":          school_row["Школа"],
-                    "Кластер":        school_row[COL_CLUSTER],
-                    "Причина штрафа": fine_row["Причина штрафа"],
-                    "Сумма штрафа":   fine_row["Сумма штрафа"],
+                    "Школа":           school_row["Школа"],
+                    "Кластер":         school_row[COL_CLUSTER],
+                    "Причина штрафа":  fine_row["Причина штрафа"],
+                    "Сумма погашения": fine_row.get("Сумма погашения", 0),
                 })
         except Exception as e:
             logger.warning("Ошибка штрафов школы %s (sheet_id=%s): %s",
                            school_row.get("Школа", "?"), sid, e)
             continue
-    return pd.DataFrame(rows, columns=["Школа", "Кластер", "Причина штрафа", "Сумма штрафа"])
+    return pd.DataFrame(rows, columns=["Школа", "Кластер", "Причина штрафа", "Сумма погашения"])
