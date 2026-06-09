@@ -106,7 +106,7 @@ avg_dropout_val = round(summary["Отсев %"].mean(), 1)
 avg_minutka_val = round(summary["Минутка %"].mean(), 1)
 
 _H = ("position:sticky;top:0;background:#f8fafc;padding:8px 12px;text-align:left;"
-      "font-size:12px;color:#64748b;font-weight:600;border-bottom:2px solid #e2e8f0;"
+      "font-size:13px;color:#1e293b;font-weight:700;border-bottom:2px solid #e2e8f0;"
       "white-space:nowrap;z-index:2")
 _D = "padding:6px 12px;font-size:13px;border-bottom:1px solid #f1f5f9;white-space:nowrap"
 _F = ("padding:8px 12px;font-size:13px;font-weight:700;color:#1e293b;"
