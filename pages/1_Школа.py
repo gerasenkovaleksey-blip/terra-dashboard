@@ -70,7 +70,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ─── KPI карточки ────────────────────────────────────────────────────────────
-c1, c2, c3, c4, c5 = st.columns(5)
+c1, c2, c3, c4, c5, c6 = st.columns(6)
 with c1:
     st.markdown(kpi_card("Пришли на 1-е занятие", str(metrics["first_lesson_students"]), "#2563eb", "👥"), unsafe_allow_html=True)
 with c2:
@@ -78,9 +78,12 @@ with c2:
 with c3:
     st.markdown(kpi_card("% отсева", f"{metrics['dropout_pct']}%", "#ef4444", "📉"), unsafe_allow_html=True)
 with c4:
-    total = int(metrics["total_fines"])
-    st.markdown(kpi_card("Сумма штрафов", f"{total:,}₽".replace(",", "\u00a0"), "#f97316", "⚠️"), unsafe_allow_html=True)
+    assigned = int(metrics["total_fines"])
+    st.markdown(kpi_card("Штрафов назначено", f"{assigned:,}₽".replace(",", "\u00a0"), "#ef4444", "📋"), unsafe_allow_html=True)
 with c5:
+    paid = int(metrics["total_fines_paid"])
+    st.markdown(kpi_card("Штрафы оплачены", f"{paid:,}₽".replace(",", "\u00a0"), "#f97316", "⚠️"), unsafe_allow_html=True)
+with c6:
     st.markdown(kpi_card("Минутка дарования", f"{metrics['avg_minutka_pct']}%", "#22c55e", "✨"), unsafe_allow_html=True)
 
 st.divider()
