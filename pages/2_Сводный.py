@@ -74,9 +74,10 @@ if len(summary) == 0:
 total_start  = int(summary["Старт"].sum())
 total_finish = int(summary["Финиш"].sum())
 avg_dropout  = round(summary["Отсев %"].mean(), 1)
-total_fines  = int(summary["Штрафы ₽"].sum())
+total_fines          = int(summary["Штрафы ₽"].sum())
+total_fines_assigned = int(summary["Штрафов назначено ₽"].sum())
 
-c1, c2, c3, c4, c5 = st.columns(5)
+c1, c2, c3, c4, c5, c6 = st.columns(6)
 with c1:
     st.markdown(kpi_card("Школ в потоке", str(len(summary)), "#2563eb", "🏫"), unsafe_allow_html=True)
 with c2:
@@ -86,6 +87,8 @@ with c3:
 with c4:
     st.markdown(kpi_card("Средний отсев", f"{avg_dropout}%", "#ef4444", "📉"), unsafe_allow_html=True)
 with c5:
+    st.markdown(kpi_card("Штрафов назначено", f"{total_fines_assigned:,}₽".replace(",", "\u00a0"), "#ef4444", "📋"), unsafe_allow_html=True)
+with c6:
     st.markdown(kpi_card("Штрафы всего", f"{total_fines:,}₽".replace(",", "\u00a0"), "#f97316", "⚠️"), unsafe_allow_html=True)
 
 st.divider()
@@ -93,10 +96,36 @@ st.divider()
 # ─── Таблица школ ────────────────────────────────────────────────────────────
 st.markdown("#### 📋 Все школы")
 
-display_df = summary[["Школа", "Кластер", "Старт", "Финиш", "Отсев %", "Штрафы ₽", "Минутка %"]].copy()
-display_df["Штрафы ₽"]  = display_df["Штрафы ₽"].apply(lambda x: f"{int(x):,}₽".replace(",", "\u00a0"))
-display_df["Отсев %"]   = display_df["Отсев %"].apply(lambda x: f"{x}%")
-display_df["Минутка %"] = display_df["Минутка %"].apply(lambda x: f"{x}%")
+# Compute weighted averages for per-student columns before formatting
+total_start_sum    = summary["Старт"].sum()
+total_finish_sum   = summary["Финиш"].sum()
+total_assigned_sum = summary["Штрафов назначено ₽"].sum()
+total_paid_sum     = summary["Штрафы ₽"].sum()
+avg_per_start  = int(round(total_assigned_sum / total_start_sum))  if total_start_sum  > 0 else 0
+avg_per_finish = int(round(total_assigned_sum / total_finish_sum)) if total_finish_sum > 0 else 0
+
+display_df = summary[["Школа", "Кластер", "Старт", "Финиш", "Отсев %", "Штрафы ₽",
+                       "Штрафов назначено ₽", "На 1 ученика (старт)", "На 1 ученика (финиш)",
+                       "Минутка %"]].copy()
+display_df["Штрафы ₽"]               = display_df["Штрафы ₽"].apply(lambda x: f"{int(x):,}₽".replace(",", "\u00a0"))
+display_df["Штрафов назначено ₽"]     = display_df["Штрафов назначено ₽"].apply(lambda x: f"{int(x):,}₽".replace(",", "\u00a0"))
+display_df["На 1 ученика (старт)"]    = display_df["На 1 ученика (старт)"].apply(lambda x: f"{int(x):,}₽".replace(",", "\u00a0"))
+display_df["На 1 ученика (финиш)"]    = display_df["На 1 ученика (финиш)"].apply(lambda x: f"{int(x):,}₽".replace(",", "\u00a0"))
+display_df["Отсев %"]                = display_df["Отсев %"].apply(lambda x: f"{x}%")
+display_df["Минутка %"]              = display_df["Минутка %"].apply(lambda x: f"{x}%")
+
+# Average row
+avg_row = pd.DataFrame([{
+    "Школа": "Среднее по потоку", "Кластер": "",
+    "Старт": total_start_sum, "Финиш": total_finish_sum,
+    "Отсев %": f"{round(summary['Отсев %'].mean(), 1)}%",
+    "Штрафы ₽": f"{int(total_paid_sum):,}₽".replace(",", "\u00a0"),
+    "Штрафов назначено ₽": f"{int(total_assigned_sum):,}₽".replace(",", "\u00a0"),
+    "На 1 ученика (старт)": f"{avg_per_start:,}₽".replace(",", "\u00a0"),
+    "На 1 ученика (финиш)": f"{avg_per_finish:,}₽".replace(",", "\u00a0"),
+    "Минутка %": f"{round(summary['Минутка %'].mean(), 1)}%",
+}])
+display_df = pd.concat([display_df, avg_row], ignore_index=True)
 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
 st.divider()

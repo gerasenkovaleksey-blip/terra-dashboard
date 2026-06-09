@@ -257,6 +257,13 @@ _FINE_REASON_ALIASES = [
     "Нарушение",
     "Описание",
 ]
+_FINE_REPAYMENT_ALIASES = [
+    "Сумма погашения",
+    "Погашено",
+    "Погашение",
+    "Оплачено",
+    "Сумма оплаты",
+]
 
 # ─── Нормализация причин штрафов ─────────────────────────────────────────────
 # Порядок важен: первое совпадение ключевого слова (без регистра) выигрывает.
@@ -296,6 +303,9 @@ def load_fines(sheet_id: str) -> pd.DataFrame:
     amount_col = _find_col(df, _FINE_AMOUNT_ALIASES, "Сумма штрафа")
     df["Сумма штрафа"] = pd.to_numeric(df[amount_col], errors="coerce").fillna(0)
 
+    repayment_col = _find_col(df, _FINE_REPAYMENT_ALIASES, "Сумма погашения")
+    df["Сумма погашения"] = pd.to_numeric(df[repayment_col], errors="coerce").fillna(0)
+
     reason_col = _find_col(df, _FINE_REASON_ALIASES, "Причина штрафа")
     df["Причина штрафа"] = df[reason_col].apply(_normalize_fine_reason)
     return df.dropna(subset=["Поток"])
@@ -328,7 +338,8 @@ def school_metrics(minutka: pd.DataFrame, fines: pd.DataFrame, stream: int) -> d
         first = last = 0
         dropout_pct = avg_minutka = 0.0
 
-    total_fines = float(f["Сумма штрафа"].sum())
+    total_fines      = float(f["Сумма штрафа"].sum())
+    total_fines_paid = float(f["Сумма погашения"].sum()) if "Сумма погашения" in f.columns else 0.0
     fines_by_reason = (
         f.groupby("Причина штрафа")["Сумма штрафа"]
         .sum()
@@ -340,6 +351,7 @@ def school_metrics(minutka: pd.DataFrame, fines: pd.DataFrame, stream: int) -> d
         "last_lesson_students":  last,
         "dropout_pct":           dropout_pct,
         "total_fines":           total_fines,
+        "total_fines_paid":      total_fines_paid,
         "avg_minutka_pct":       avg_minutka,
         "fines_by_reason":       fines_by_reason,
         "minutka_by_lesson":     m[["Занятие", "Количество учеников в школе",
@@ -353,7 +365,8 @@ def load_all_schools_summary(stream: int) -> pd.DataFrame:
     """
     Load metrics for ALL schools for a given stream.
     Returns DataFrame with columns:
-      Школа, Кластер, Старт, Финиш, Отсев %, Штрафы ₽, Минутка %, sheet_id
+      Школа, Кластер, Старт, Финиш, Отсев %, Штрафы ₽, Штрафов назначено ₽,
+      На 1 ученика (старт), На 1 ученика (финиш), Минутка %, sheet_id
     Skips schools with no data for the requested stream.
     """
     registry = load_registry()
@@ -368,15 +381,24 @@ def load_all_schools_summary(stream: int) -> pd.DataFrame:
             if stream not in m["Поток"].values:
                 continue
             metrics = school_metrics(m, f, stream)
+            start    = metrics["first_lesson_students"]
+            finish   = metrics["last_lesson_students"]
+            assigned = int(metrics["total_fines"])
+            paid     = int(metrics["total_fines_paid"])
+            per_start  = int(round(assigned / start))  if start  > 0 else 0
+            per_finish = int(round(assigned / finish)) if finish > 0 else 0
             rows.append({
-                "Школа":     school_row["Школа"],
-                "Кластер":   school_row[COL_CLUSTER],
-                "Старт":     metrics["first_lesson_students"],
-                "Финиш":     metrics["last_lesson_students"],
-                "Отсев %":   metrics["dropout_pct"],
-                "Штрафы ₽":  int(metrics["total_fines"]),
-                "Минутка %": metrics["avg_minutka_pct"],
-                "sheet_id":  sid,
+                "Школа":                  school_row["Школа"],
+                "Кластер":                school_row[COL_CLUSTER],
+                "Старт":                  start,
+                "Финиш":                  finish,
+                "Отсев %":                metrics["dropout_pct"],
+                "Штрафы ₽":               paid,
+                "Штрафов назначено ₽":    assigned,
+                "На 1 ученика (старт)":   per_start,
+                "На 1 ученика (финиш)":   per_finish,
+                "Минутка %":              metrics["avg_minutka_pct"],
+                "sheet_id":               sid,
             })
         except Exception as e:
             logger.warning("Ошибка загрузки школы %s (sheet_id=%s): %s",
