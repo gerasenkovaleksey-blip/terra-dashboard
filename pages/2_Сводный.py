@@ -96,37 +96,66 @@ st.divider()
 # ─── Таблица школ ────────────────────────────────────────────────────────────
 st.markdown("#### 📋 Все школы")
 
-# Compute weighted averages for per-student columns before formatting
-total_start_sum    = summary["Старт"].sum()
-total_finish_sum   = summary["Финиш"].sum()
-total_assigned_sum = summary["Штрафов назначено ₽"].sum()
-total_paid_sum     = summary["Штрафы ₽"].sum()
+total_start_sum    = int(summary["Старт"].sum())
+total_finish_sum   = int(summary["Финиш"].sum())
+total_assigned_sum = int(summary["Штрафов назначено ₽"].sum())
+total_paid_sum     = int(summary["Штрафы ₽"].sum())
 avg_per_start  = int(round(total_assigned_sum / total_start_sum))  if total_start_sum  > 0 else 0
 avg_per_finish = int(round(total_assigned_sum / total_finish_sum)) if total_finish_sum > 0 else 0
+avg_dropout_val = round(summary["Отсев %"].mean(), 1)
+avg_minutka_val = round(summary["Минутка %"].mean(), 1)
 
-display_df = summary[["Школа", "Кластер", "Старт", "Финиш", "Отсев %", "Штрафы ₽",
-                       "Штрафов назначено ₽", "На 1 ученика (старт)", "На 1 ученика (финиш)",
-                       "Минутка %"]].copy()
-display_df["Штрафы ₽"]               = display_df["Штрафы ₽"].apply(lambda x: f"{int(x):,}₽".replace(",", "\u00a0"))
-display_df["Штрафов назначено ₽"]     = display_df["Штрафов назначено ₽"].apply(lambda x: f"{int(x):,}₽".replace(",", "\u00a0"))
-display_df["На 1 ученика (старт)"]    = display_df["На 1 ученика (старт)"].apply(lambda x: f"{int(x):,}₽".replace(",", "\u00a0"))
-display_df["На 1 ученика (финиш)"]    = display_df["На 1 ученика (финиш)"].apply(lambda x: f"{int(x):,}₽".replace(",", "\u00a0"))
-display_df["Отсев %"]                = display_df["Отсев %"].apply(lambda x: f"{x}%")
-display_df["Минутка %"]              = display_df["Минутка %"].apply(lambda x: f"{x}%")
+_H = ("position:sticky;top:0;background:#f8fafc;padding:8px 12px;text-align:left;"
+      "font-size:12px;color:#64748b;font-weight:600;border-bottom:2px solid #e2e8f0;"
+      "white-space:nowrap;z-index:2")
+_D = "padding:6px 12px;font-size:13px;border-bottom:1px solid #f1f5f9;white-space:nowrap"
+_F = ("padding:8px 12px;font-size:13px;font-weight:700;color:#1e293b;"
+      "position:sticky;bottom:0;background:#eff6ff;"
+      "border-top:2px solid #2563eb;z-index:2;white-space:nowrap")
 
-# Average row
-avg_row = pd.DataFrame([{
-    "Школа": "Среднее по потоку", "Кластер": "",
-    "Старт": total_start_sum, "Финиш": total_finish_sum,
-    "Отсев %": f"{round(summary['Отсев %'].mean(), 1)}%",
-    "Штрафы ₽": f"{int(total_paid_sum):,}₽".replace(",", "\u00a0"),
-    "Штрафов назначено ₽": f"{int(total_assigned_sum):,}₽".replace(",", "\u00a0"),
-    "На 1 ученика (старт)": f"{avg_per_start:,}₽".replace(",", "\u00a0"),
-    "На 1 ученика (финиш)": f"{avg_per_finish:,}₽".replace(",", "\u00a0"),
-    "Минутка %": f"{round(summary['Минутка %'].mean(), 1)}%",
-}])
-display_df = pd.concat([display_df, avg_row], ignore_index=True)
-st.dataframe(display_df, use_container_width=True, hide_index=True)
+_heads = ["Школа","Кластер","Старт","Финиш","Отсев %","Штрафы ₽",
+          "Назначено ₽","На 1 уч. (старт)","На 1 уч. (финиш)","Минутка %"]
+_cols  = ["Школа","Кластер","Старт","Финиш","Отсев %","Штрафы ₽",
+          "Штрафов назначено ₽","На 1 ученика (старт)","На 1 ученика (финиш)","Минутка %"]
+_rub   = {"Штрафы ₽","Штрафов назначено ₽","На 1 ученика (старт)","На 1 ученика (финиш)"}
+
+def _r(x): return f"{int(x):,}₽".replace(",", " ")
+
+_th = "".join(f'<th style="{_H}">{h}</th>' for h in _heads)
+
+_tbody = ""
+for _i, (_, _row) in enumerate(summary.iterrows()):
+    _bg = "#fff" if _i % 2 == 0 else "#f8fafc"
+    _tds = ""
+    for _c in _cols:
+        _v = _row[_c]
+        if _c in _rub:       _v = _r(_v)
+        elif _c == "Отсев %": _v = f"{_v}%"
+        elif _c == "Минутка %": _v = f"{_v}%"
+        else: _v = str(_v) if pd.notna(_v) else ""
+        _tds += f'<td style="{_D}">{escape(str(_v))}</td>'
+    _tbody += f'<tr style="background:{_bg}">{_tds}</tr>'
+
+_fvals = [
+    "Среднее по потоку", "",
+    str(total_start_sum), str(total_finish_sum),
+    f"{avg_dropout_val}%",
+    _r(total_paid_sum), _r(total_assigned_sum),
+    _r(avg_per_start), _r(avg_per_finish),
+    f"{avg_minutka_val}%",
+]
+_tfoot = "".join(f'<td style="{_F}">{escape(v)}</td>' for v in _fvals)
+
+st.markdown(
+    f'<div style="max-height:560px;overflow-y:auto;border:1px solid #e2e8f0;'
+    f'border-radius:8px;margin-bottom:4px">'
+    f'<table style="width:100%;border-collapse:collapse">'
+    f'<thead><tr>{_th}</tr></thead>'
+    f'<tbody>{_tbody}</tbody>'
+    f'<tfoot><tr>{_tfoot}</tr></tfoot>'
+    f'</table></div>',
+    unsafe_allow_html=True
+)
 
 st.divider()
 
