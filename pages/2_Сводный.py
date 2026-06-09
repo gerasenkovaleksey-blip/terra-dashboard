@@ -90,7 +90,7 @@ with c4:
 with c5:
     st.markdown(kpi_card("Штрафов назначено", f"{total_fines_assigned:,}₽".replace(",", "\u00a0"), "#ef4444", "📋"), unsafe_allow_html=True)
 with c6:
-    st.markdown(kpi_card("Штрафы всего", f"{total_fines:,}₽".replace(",", "\u00a0"), "#f97316", "⚠️"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Оплачено всего", f"{total_fines:,}₽".replace(",", "\u00a0"), "#f97316", "⚠️"), unsafe_allow_html=True)
 
 st.divider()
 
