@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from html import escape
+import streamlit.components.v1 as components
 from components.theme import inject_css, kpi_card, bar_row
 from data.loader import load_registry, load_minutka, load_all_schools_summary, load_all_fines_detail
 
@@ -105,13 +106,13 @@ avg_per_finish = int(round(total_assigned_sum / total_finish_sum)) if total_fini
 avg_dropout_val = round(summary["Отсев %"].mean(), 1)
 avg_minutka_val = round(summary["Минутка %"].mean(), 1)
 
-_H = ("position:sticky;top:0;background:#f8fafc;padding:8px 12px;text-align:left;"
-      "font-size:13px;color:#1e293b;font-weight:700;border-bottom:2px solid #e2e8f0;"
-      "white-space:nowrap;z-index:2")
-_D = "padding:6px 12px;font-size:13px;border-bottom:1px solid #f1f5f9;white-space:nowrap"
-_F = ("padding:8px 12px;font-size:13px;font-weight:700;color:#1e293b;"
-      "position:sticky;bottom:0;background:#eff6ff;"
-      "border-top:2px solid #2563eb;z-index:2;white-space:nowrap")
+_TH = ("position:sticky;top:0;background:#f8fafc;padding:8px 12px;text-align:left;"
+       "font-size:13px;color:#1e293b;font-weight:700;border-bottom:2px solid #e2e8f0;"
+       "white-space:nowrap;z-index:2;cursor:pointer;user-select:none")
+_TD = "padding:6px 12px;font-size:13px;border-bottom:1px solid #f1f5f9;white-space:nowrap"
+_TF = ("padding:8px 12px;font-size:13px;font-weight:700;color:#1e293b;"
+       "position:sticky;bottom:0;background:#eff6ff;"
+       "border-top:2px solid #2563eb;z-index:2;white-space:nowrap")
 
 _heads = ["Школа","Кластер","Старт","Финиш","Отсев %","Назначено ₽",
           "Штрафы ₽","На 1 уч. (старт)","На 1 уч. (финиш)","Минутка %"]
@@ -119,9 +120,13 @@ _cols  = ["Школа","Кластер","Старт","Финиш","Отсев %"
           "Штрафы ₽","На 1 ученика (старт)","На 1 ученика (финиш)","Минутка %"]
 _rub   = {"Штрафы ₽","Штрафов назначено ₽","На 1 ученика (старт)","На 1 ученика (финиш)"}
 
-def _r(x): return f"{int(x):,}₽".replace(",", " ")
+def _r(x): return f"{int(x):,}₽".replace(",", " ")
 
-_th = "".join(f'<th style="{_H}">{h}</th>' for h in _heads)
+_th = "".join(
+    f'<th style="{_TH}" onclick="sortTable({i})">'
+    f'{h}<span class="arr" style="font-size:10px;color:#94a3b8;margin-left:4px">⇅</span></th>'
+    for i, h in enumerate(_heads)
+)
 
 _tbody = ""
 for _i, (_, _row) in enumerate(summary.iterrows()):
@@ -129,11 +134,11 @@ for _i, (_, _row) in enumerate(summary.iterrows()):
     _tds = ""
     for _c in _cols:
         _v = _row[_c]
-        if _c in _rub:       _v = _r(_v)
-        elif _c == "Отсев %": _v = f"{_v}%"
+        if _c in _rub:          _v = _r(_v)
+        elif _c == "Отсев %":   _v = f"{_v}%"
         elif _c == "Минутка %": _v = f"{_v}%"
         else: _v = str(_v) if pd.notna(_v) else ""
-        _tds += f'<td style="{_D}">{escape(str(_v))}</td>'
+        _tds += f'<td style="{_TD}">{escape(str(_v))}</td>'
     _tbody += f'<tr style="background:{_bg}">{_tds}</tr>'
 
 _fvals = [
@@ -144,18 +149,52 @@ _fvals = [
     _r(avg_per_start), _r(avg_per_finish),
     f"{avg_minutka_val}%",
 ]
-_tfoot = "".join(f'<td style="{_F}">{escape(v)}</td>' for v in _fvals)
+_tfoot = "".join(f'<td style="{_TF}">{escape(v)}</td>' for v in _fvals)
 
-st.markdown(
-    f'<div style="max-height:560px;overflow-y:auto;border:1px solid #e2e8f0;'
-    f'border-radius:8px;margin-bottom:4px">'
-    f'<table style="width:100%;border-collapse:collapse">'
+_js = (
+    "<script>"
+    "function sortTable(idx){"
+    "var t=document.getElementById('t');"
+    "var rows=Array.from(t.tBodies[0].rows);"
+    "var ths=t.tHead.rows[0].cells;"
+    "var th=ths[idx];"
+    "var dir=th.dataset.dir==='asc'?'desc':'asc';"
+    "for(var i=0;i<ths.length;i++){"
+    "ths[i].dataset.dir='';"
+    "var a=ths[i].querySelector('.arr');"
+    "if(a)a.textContent='⇅';}"
+    "th.dataset.dir=dir;"
+    "var a=th.querySelector('.arr');"
+    "if(a)a.textContent=dir==='asc'?'▲':'▼';"
+    "function val(row){"
+    "var txt=row.cells[idx].textContent.trim();"
+    "var n=parseFloat(txt.replace(/[^0-9.]/g,''));"
+    "return isNaN(n)?txt.toLowerCase():n;}"
+    "rows.sort(function(a,b){"
+    "var av=val(a),bv=val(b);"
+    "if(typeof av==='number'&&typeof bv==='number')"
+    "return dir==='asc'?av-bv:bv-av;"
+    "return dir==='asc'?(av<bv?-1:av>bv?1:0):(bv<av?-1:bv>av?1:0);});"
+    "rows.forEach(function(r){t.tBodies[0].appendChild(r);});}"
+    "</script>"
+)
+
+_iframe_h = min(580, 48 + len(summary) * 38 + 48) + 4
+
+_html = (
+    '<!DOCTYPE html><html><head><meta charset="utf-8">'
+    '<style>body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}'
+    'tbody tr:hover{background:#f0f9ff!important}'
+    'thead th:hover{background:#f1f5f9!important}'
+    '</style></head><body>'
+    '<table id="t" style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0">'
     f'<thead><tr>{_th}</tr></thead>'
     f'<tbody>{_tbody}</tbody>'
     f'<tfoot><tr>{_tfoot}</tr></tfoot>'
-    f'</table></div>',
-    unsafe_allow_html=True
+    '</table>' + _js + '</body></html>'
 )
+
+components.html(_html, height=_iframe_h, scrolling=True)
 
 st.divider()
 
