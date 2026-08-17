@@ -234,7 +234,12 @@ body{{margin:0;font-family:"Source Sans Pro","Segoe UI",-apple-system,sans-serif
 .k .ic{{font-size:1rem;margin-bottom:6px;transition:transform .35s cubic-bezier(.16,1,.3,1)}}
 .k:hover .ic{{transform:scale(1.25) rotate(-8deg)}}
 .k .val{{font-size:1.45rem;font-weight:800;color:var(--c);line-height:1;margin-top:6px;
-  font-variant-numeric:tabular-nums}}
+  font-variant-numeric:tabular-nums;
+  transform-origin:left center;transition:transform .35s cubic-bezier(.16,1,.3,1)}}
+/* Растём от левого края, а не от центра: цифра не «уплывает» вбок.
+   Масштаб намеренно небольшой — у .cell стоит overflow:hidden, и длинные
+   значения вроде «486 300₽» при сильном увеличении обрезались бы. */
+.k:hover .val{{transform:scale(1.08)}}
 .spk{{display:block;width:100%;height:22px;margin-top:7px}}
 .spk path{{fill:none;stroke:var(--c);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;
   opacity:.4;stroke-dasharray:200;stroke-dashoffset:0;
