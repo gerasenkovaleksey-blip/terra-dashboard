@@ -84,8 +84,9 @@ total_finish = int(summary["Финиш"].sum())
 avg_dropout  = round(summary["Отсев %"].mean(), 1)
 total_fines          = int(summary["Штрафы ₽"].sum())
 total_fines_assigned = int(summary["Штрафов назначено ₽"].sum())
+avg_rating = round(summary["Рейтинг"].mean(), 2) if summary["Рейтинг"].notna().any() else None
 
-c1, c2, c3, c4, c5, c6 = st.columns(6)
+c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
 with c1:
     st.markdown(kpi_card("Школ в потоке", str(len(summary)), "#2563eb", "🏫"), unsafe_allow_html=True)
 with c2:
@@ -95,9 +96,11 @@ with c3:
 with c4:
     st.markdown(kpi_card("Средний отсев", f"{avg_dropout}%", "#ef4444", "📉"), unsafe_allow_html=True)
 with c5:
-    st.markdown(kpi_card("Штрафов назначено", f"{total_fines_assigned:,}₽".replace(",", "\u00a0"), "#ef4444", "📋"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Штрафов назначено", f"{total_fines_assigned:,}₽".replace(",", " "), "#ef4444", "📋"), unsafe_allow_html=True)
 with c6:
-    st.markdown(kpi_card("Оплачено всего", f"{total_fines:,}₽".replace(",", "\u00a0"), "#f97316", "⚠️"), unsafe_allow_html=True)
+    st.markdown(kpi_card("Оплачено всего", f"{total_fines:,}₽".replace(",", " "), "#f97316", "⚠️"), unsafe_allow_html=True)
+with c7:
+    st.markdown(kpi_card("Средний рейтинг", f"{avg_rating:.2f}" if avg_rating is not None else "—", "#22c55e", "⭐"), unsafe_allow_html=True)
 
 st.divider()
 
@@ -231,7 +234,7 @@ with col_right:
         amount = int(row["Штрафы ₽"])
         if amount > 0:
             bars_html += bar_row(row["Школа"], amount, max_f,
-                                 f"{amount:,}₽".replace(",", "\u00a0"), "orange")
+                                 f"{amount:,}₽".replace(",", " "), "orange")
     if bars_html:
         st.markdown(bars_html, unsafe_allow_html=True)
     else:
@@ -314,7 +317,7 @@ if len(fines_detail) > 0:
         bars_html_l = bars_html_r = ""
         for i, (reason, amount) in enumerate(by_reason.items()):
             html = bar_row(reason, amount, max_reason,
-                           f"{int(amount):,}₽".replace(",", " "), "orange")
+                           f"{int(amount):,}₽".replace(",", " "), "orange")
             if i < half_r:
                 bars_html_l += html
             else:
