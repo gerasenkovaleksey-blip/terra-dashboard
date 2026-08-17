@@ -164,6 +164,8 @@ components.html(
               if selected_cluster != "Все кластеры" else None),
     ),
     height=290,
+    # См. комментарий на странице школы: страховка от обрезания на узком экране
+    scrolling=True,
 )
 
 st.divider()

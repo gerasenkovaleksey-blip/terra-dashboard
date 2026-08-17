@@ -23,7 +23,9 @@ with st.sidebar:
 school_row = registry[registry["Школа"] == selected_school].iloc[0]
 sheet_id   = school_row["sheet_id"]
 cluster    = school_row["Кластер"] if pd.notna(school_row["Кластер"]) else "—"
-accent     = cluster_color(cluster)
+accent      = cluster_color(cluster)
+leader_name = str(school_row.get("Руководитель") or "").strip()
+leader_tg   = str(school_row.get("Телеграм") or "").strip()
 
 if not sheet_id:
     st.warning(f"Для школы «{selected_school}» не указана ссылка на таблицу.")
@@ -115,8 +117,13 @@ components.html(
         trend_note=trend_note,
         accent=accent,
         pill={"text": str(cluster), "color": accent} if cluster != "—" else None,
+        leader={"name": leader_name, "url": leader_tg} if leader_name else None,
     ),
     height=290,
+    # У iframe высота фиксированная: на узком экране KPI переносятся на второй
+    # ряд и не помещаются. scrolling оставляет их доступными, а не обрезает —
+    # на десктопе контент влезает целиком, поэтому полосы прокрутки не будет.
+    scrolling=True,
 )
 
 # ─── Воронка отсева ──────────────────────────────────────────────────────────

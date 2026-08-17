@@ -16,6 +16,8 @@ REGISTRY_ID = "1K4OZ6wMkJFgW3gAvW4m4YJpwzFaPICB8hZIeKRVt5DU"
 COL_SCHOOL  = "Название школы"
 COL_CLUSTER = "Кластер"
 COL_URL     = "Ссылка на таблицу с подробным описанием школы"
+COL_LEADER  = "Полное ФИО"
+COL_TG      = "Ссылка на профиль"
 
 # ─── Переопределения sheet_id ─────────────────────────────────────────────────
 # Если ссылка на таблицу школы изменилась, указываем новый sheet_id здесь.
@@ -90,7 +92,7 @@ def _extract_sheet_id(url: str) -> str | None:
 def load_registry() -> pd.DataFrame:
     """
     Load the school registry.
-    Returns DataFrame with columns: Школа, Кластер, sheet_id.
+    Returns DataFrame with columns: Школа, Кластер, Руководитель, Телеграм, sheet_id.
     Drops rows with empty school name.
     """
     url = f"https://docs.google.com/spreadsheets/d/{REGISTRY_ID}/export?format=csv&gid=0"
@@ -111,7 +113,17 @@ def load_registry() -> pd.DataFrame:
         lambda row: SCHOOL_SHEET_OVERRIDES.get(str(row[COL_SCHOOL]).strip(), row["sheet_id"]),
         axis=1,
     )
-    result = df[[COL_SCHOOL, COL_CLUSTER, COL_URL, "sheet_id"]].reset_index(drop=True)
+    # Руководитель школы и ссылка на его телеграм.
+    # В таблице встречаются лишние пробелы по краям — чистим сразу.
+    for src, dst in ((COL_LEADER, "Руководитель"), (COL_TG, "Телеграм")):
+        if src in df.columns:
+            df[dst] = df[src].apply(lambda v: str(v).strip() if pd.notna(v) else "")
+        else:
+            logger.warning("Колонка «%s» не найдена в реестре", src)
+            df[dst] = ""
+
+    result = df[[COL_SCHOOL, COL_CLUSTER, COL_URL,
+                 "Руководитель", "Телеграм", "sheet_id"]].reset_index(drop=True)
     return result.rename(columns={COL_SCHOOL: "Школа"})
 
 # ─── МИНУТКА_ДАРОВАНИЯ ───────────────────────────────────────────────────────

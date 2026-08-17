@@ -57,6 +57,20 @@ def format_value(kpi: dict) -> str:
     return body + suffix
 
 
+def _safe_link(url) -> str:
+    """
+    Возвращает URL, только если это обычная http(s)-ссылка.
+
+    Ссылки приходят из Google-таблицы, которую редактируют руками, поэтому
+    подставлять их в href как есть нельзя: значение вида `javascript:...`
+    превратилось бы в исполняемый код на странице.
+    """
+    if not url:
+        return ""
+    clean = str(url).strip()
+    return clean if clean.lower().startswith(("https://", "http://")) else ""
+
+
 def _kpi_cell(kpi: dict) -> str:
     color = kpi.get("color", "#2563eb")
     spark = ""
@@ -88,6 +102,7 @@ def bento_header_html(
     accent: str = "#2563eb",
     pill: dict | None = None,
     rating_label: str = "Средний рейтинг",
+    leader: dict | None = None,
 ) -> str:
     """
     Полный HTML-документ для components.html: шапка (3 плитки) + ряд KPI.
@@ -97,12 +112,25 @@ def bento_header_html(
       color (str), icon (str), series (list[float] | None)
     accent — цвет акцента шапки (обычно цвет кластера).
     pill   — {"text": ..., "color": ...}: плашка рядом с заголовком.
+    leader — {"name": ..., "url": ...}: строка «Руководитель» под подзаголовком.
     """
     pill_html = ""
     if pill and pill.get("text"):
         p_color = pill.get("color", accent)
         pill_html = (f'<span class="pill" style="background:{p_color}1a;color:{p_color}">'
                      f'{escape(str(pill["text"]))}</span>')
+
+    leader_html = ""
+    if leader and leader.get("name"):
+        l_name = escape(str(leader["name"]))
+        l_url = _safe_link(leader.get("url"))
+        # Без валидной ссылки показываем просто имя — строка не пропадает
+        l_body = (
+            f'<a href="{escape(l_url)}" target="_blank" rel="noopener noreferrer">'
+            f'{l_name}<span class="tg">↗</span></a>'
+            if l_url else l_name
+        )
+        leader_html = f'<div class="hm-leader">Руководитель: {l_body}</div>'
 
     if avg_rating is not None:
         r_color = "#22c55e" if avg_rating >= 9 else "#f97316" if avg_rating >= 7 else "#ef4444"
@@ -173,6 +201,11 @@ body{{margin:0;font-family:"Source Sans Pro","Segoe UI",-apple-system,sans-serif
 .hm-sub{{font-size:.65rem;color:var(--c);letter-spacing:2px;text-transform:uppercase;margin-top:3px}}
 .pill{{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.62rem;font-weight:700;
   letter-spacing:.5px;white-space:nowrap}}
+.hm-leader{{font-size:.72rem;color:#64748b;margin-top:7px}}
+.hm-leader a{{color:var(--c);font-weight:600;text-decoration:none;
+  border-bottom:1px solid transparent;transition:border-color .2s ease}}
+.hm-leader a:hover{{border-bottom-color:var(--c)}}
+.hm-leader .tg{{font-size:.62rem;margin-left:3px;opacity:.65}}
 
 .head-rate .hr-body{{display:flex;align-items:center;gap:12px;margin-top:8px}}
 .ring-wrap{{position:relative;width:64px;height:64px;flex-shrink:0}}
@@ -228,6 +261,7 @@ body{{margin:0;font-family:"Source Sans Pro","Segoe UI",-apple-system,sans-serif
             {pill_html}
           </div>
           <div class="hm-sub">{escape(subtitle)}</div>
+          {leader_html}
         </div>
       </div>
     </div>
