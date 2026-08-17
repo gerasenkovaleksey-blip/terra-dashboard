@@ -410,6 +410,34 @@ def load_all_schools_summary(stream: int) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=3600)
+def load_streams_history(streams: tuple[int, ...]) -> pd.DataFrame:
+    """
+    Сводка по нескольким потокам сразу — источник данных для спарклайнов (трендов).
+
+    Переиспользует load_all_schools_summary() для каждого потока: XLSX-файлы школ
+    уже лежат в кэше _load_workbook(), поэтому дополнительной сетевой нагрузки нет —
+    только пересчёт метрик.
+
+    Школы, которых в прошлых потоках не было, просто отсутствуют в строках за те
+    потоки — вызывающий код дополняет их нулями (новая школа = отсчёт от нуля).
+
+    Returns: те же колонки, что load_all_schools_summary(), плюс "Поток".
+    Пустой DataFrame, если данных нет вообще.
+    """
+    frames = []
+    for s in streams:
+        df = load_all_schools_summary(int(s))
+        if len(df) == 0:
+            continue
+        df = df.copy()
+        df["Поток"] = int(s)
+        frames.append(df)
+    if not frames:
+        return pd.DataFrame(columns=["Школа", "Кластер", "Поток"])
+    return pd.concat(frames, ignore_index=True)
+
+
+@st.cache_data(ttl=3600)
 def load_all_fines_detail(stream: int) -> pd.DataFrame:
     """
     Load raw fines for ALL schools for a given stream.

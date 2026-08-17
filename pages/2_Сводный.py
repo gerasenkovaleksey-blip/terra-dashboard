@@ -2,10 +2,11 @@ import streamlit as st
 import pandas as pd
 from html import escape
 import streamlit.components.v1 as components
-from components.theme import inject_css, kpi_card, bar_row
+from components.theme import inject_css, bar_row
+from components.bento import bento_header_html
 from data.loader import (
     load_registry, load_minutka, load_all_schools_summary, load_all_fines_detail,
-    load_school_ratings,
+    load_school_ratings, load_streams_history,
 )
 
 st.set_page_config(page_title="TERRA · Сводный", page_icon="📊", layout="wide")
@@ -60,21 +61,20 @@ if selected_school_filter != "Все школы":
 ratings = load_school_ratings()
 summary = summary.merge(ratings[["Школа", "Рейтинг", "Отзывов"]], on="Школа", how="left")
 
-# ─── Заголовок ───────────────────────────────────────────────────────────────
-cluster_label = escape(selected_cluster) if selected_cluster != "Все кластеры" else "Все кластеры"
-st.markdown(f"""
-<div class="terra-header">
-  <div class="terra-ring"></div>
-  <div>
-    <div style="font-size:1.2rem;font-weight:700;color:#1e293b">Сводный дашборд</div>
-    <div style="font-size:0.65rem;color:#2563eb;letter-spacing:2px;text-transform:uppercase">
-        {cluster_label} · Поток {selected_stream}
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+cluster_label = selected_cluster if selected_cluster != "Все кластеры" else "Все кластеры"
 
 if len(summary) == 0:
+    st.markdown(f"""
+    <div class="terra-header">
+      <div class="terra-ring"></div>
+      <div>
+        <div style="font-size:1.2rem;font-weight:700;color:#1e293b">Сводный дашборд</div>
+        <div style="font-size:0.65rem;color:#2563eb;letter-spacing:2px;text-transform:uppercase">
+            {escape(cluster_label)} · Поток {selected_stream}
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
     st.warning("Нет данных за выбранный поток / кластер")
     st.stop()
 
@@ -86,21 +86,80 @@ total_fines          = int(summary["Штрафы ₽"].sum())
 total_fines_assigned = int(summary["Штрафов назначено ₽"].sum())
 avg_rating = round(summary["Рейтинг"].mean(), 2) if summary["Рейтинг"].notna().any() else None
 
-c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
-with c1:
-    st.markdown(kpi_card("Школ в потоке", str(len(summary)), "#2563eb", "🏫"), unsafe_allow_html=True)
-with c2:
-    st.markdown(kpi_card("Учеников на старте", str(total_start), "#2563eb", "👥"), unsafe_allow_html=True)
-with c3:
-    st.markdown(kpi_card("Дошли до финала", str(total_finish), "#22c55e", "🎓"), unsafe_allow_html=True)
-with c4:
-    st.markdown(kpi_card("Средний отсев", f"{avg_dropout}%", "#ef4444", "📉"), unsafe_allow_html=True)
-with c5:
-    st.markdown(kpi_card("Штрафов назначено", f"{total_fines_assigned:,}₽".replace(",", " "), "#ef4444", "📋"), unsafe_allow_html=True)
-with c6:
-    st.markdown(kpi_card("Оплачено всего", f"{total_fines:,}₽".replace(",", " "), "#f97316", "⚠️"), unsafe_allow_html=True)
-with c7:
-    st.markdown(kpi_card("Средний рейтинг", f"{avg_rating:.2f}" if avg_rating is not None else "—", "#22c55e", "⭐"), unsafe_allow_html=True)
+# ─── История потоков для спарклайнов ─────────────────────────────────────────
+# Берём до 6 последних потоков включительно. XLSX школ уже лежат в кэше после
+# load_all_schools_summary(), поэтому сети тут нет — только пересчёт метрик.
+HISTORY_DEPTH = 6
+hist_streams = tuple(s for s in sorted(streams) if s <= selected_stream)[-HISTORY_DEPTH:]
+history = load_streams_history(hist_streams)
+
+# Те же фильтры, что и для summary — тренд должен соответствовать тому, что на экране
+if len(history) > 0:
+    if selected_cluster != "Все кластеры":
+        history = history[history["Кластер"] == selected_cluster]
+    if selected_school_filter != "Все школы":
+        history = history[history["Школа"] == selected_school_filter]
+
+
+def _trend(col: str, how: str = "sum") -> list[float]:
+    """
+    Ряд значений метрики по потокам hist_streams — данные для спарклайна.
+    Потоки, где школы ещё не было, дают 0: новая школа стартует с нуля.
+    """
+    if len(hist_streams) < 2 or len(history) == 0:
+        return []
+    if how == "count":
+        series = history.groupby("Поток").size()
+    elif how == "mean":
+        series = history.groupby("Поток")[col].mean()
+    else:
+        series = history.groupby("Поток")[col].sum()
+    return [float(series.get(s, 0.0)) for s in hist_streams]
+
+
+kpis = [
+    {"label": "Школ в потоке",      "num": len(summary),         "icon": "🏫", "color": "#2563eb",
+     "series": _trend("Школа", "count")},
+    {"label": "Учеников на старте", "num": total_start,          "icon": "👥", "color": "#2563eb",
+     "sep": True, "series": _trend("Старт")},
+    {"label": "Дошли до финала",    "num": total_finish,         "icon": "🎓", "color": "#22c55e",
+     "sep": True, "series": _trend("Финиш")},
+    {"label": "Средний отсев",      "num": avg_dropout,          "icon": "📉", "color": "#ef4444",
+     "dec": 1, "suf": "%", "series": _trend("Отсев %", "mean")},
+    {"label": "Штрафов назначено",  "num": total_fines_assigned, "icon": "📋", "color": "#ef4444",
+     "sep": True, "suf": "₽", "series": _trend("Штрафов назначено ₽")},
+    {"label": "Оплачено всего",     "num": total_fines,          "icon": "⚠️", "color": "#f97316",
+     "sep": True, "suf": "₽", "series": _trend("Штрафы ₽")},
+]
+
+# Рейтинг общий по всем потокам, к потоку не привязан — тренда по нему нет.
+# Если оценок нет вообще — карточку не показываем (иначе счётчик нарисует «0.00»),
+# об этом уже сообщает плитка рейтинга в шапке.
+if avg_rating is not None:
+    kpis.append({"label": "Средний рейтинг", "num": avg_rating, "icon": "⭐",
+                 "color": "#22c55e", "dec": 2, "series": []})
+
+rated_count = int(summary["Рейтинг"].notna().sum())
+high_rated  = int((summary["Рейтинг"] >= 9).sum())
+trend_note = (
+    f"Тренд на спарклайнах: потоки {hist_streams[0]}–{hist_streams[-1]}"
+    if len(hist_streams) >= 2 else
+    "Тренд появится, когда наберётся 2+ потока"
+)
+
+components.html(
+    bento_header_html(
+        title="Сводный дашборд",
+        subtitle=f"{cluster_label} · Поток {selected_stream}",
+        kpis=kpis,
+        avg_rating=avg_rating,
+        rating_note=(f"{high_rated} из {rated_count} школ с оценкой ≥ 9.0"
+                     if rated_count else "Нет оценок"),
+        schools_note=f"{len(summary)} школ · поток {selected_stream}",
+        trend_note=trend_note,
+    ),
+    height=290,
+)
 
 st.divider()
 
@@ -139,18 +198,54 @@ _th = "".join(
     for i, h in enumerate(_heads)
 )
 
+# Цвет кластера — детерминированно по алфавитному порядку, чтобы не «прыгал»
+# между перерисовками при смене фильтров.
+_CLUSTER_PALETTE = ["#2563eb", "#f97316", "#8b5cf6", "#0d9488", "#e11d48",
+                    "#ca8a04", "#0284c7", "#7c3aed"]
+_cluster_color = {
+    name: _CLUSTER_PALETTE[i % len(_CLUSTER_PALETTE)]
+    for i, name in enumerate(sorted(summary["Кластер"].dropna().unique()))
+}
+
+
+def _dropout_color(v) -> str:
+    if pd.isna(v):
+        return "#334155"
+    return "#ef4444" if v >= 25 else "#f97316" if v >= 15 else "#22c55e"
+
+
+def _rating_color(v) -> str:
+    if pd.isna(v):
+        return "#94a3b8"
+    return "#22c55e" if v >= 9 else "#f97316" if v >= 7 else "#ef4444"
+
+
 _tbody = ""
 for _i, (_, _row) in enumerate(summary.iterrows()):
     _bg = "#fff" if _i % 2 == 0 else "#f8fafc"
     _tds = ""
     for _c in _cols:
         _v = _row[_c]
-        if _c in _rub:          _v = _r(_v)
-        elif _c == "Отсев %":   _v = f"{_v}%"
-        elif _c == "Минутка %": _v = f"{_v}%"
-        elif _c == "Рейтинг":   _v = f"{_v:.2f}" if pd.notna(_v) else "—"
-        else: _v = str(_v) if pd.notna(_v) else ""
-        _tds += f'<td style="{_TD}">{escape(str(_v))}</td>'
+        _extra = ""
+        if _c == "Кластер":
+            _name = str(_v) if pd.notna(_v) else ""
+            _col = _cluster_color.get(_name, "#64748b")
+            _tds += (f'<td style="{_TD}"><span class="pill" '
+                     f'style="background:{_col}18;color:{_col}">{escape(_name)}</span></td>')
+            continue
+        if _c in _rub:
+            _v = _r(_v)
+        elif _c == "Отсев %":
+            _extra = f"color:{_dropout_color(_v)};font-weight:700"
+            _v = f"{_v}%"
+        elif _c == "Минутка %":
+            _v = f"{_v}%"
+        elif _c == "Рейтинг":
+            _extra = f"color:{_rating_color(_v)};font-weight:700"
+            _v = f"{_v:.2f}" if pd.notna(_v) else "—"
+        else:
+            _v = str(_v) if pd.notna(_v) else ""
+        _tds += f'<td style="{_TD};{_extra}">{escape(str(_v))}</td>'
     _tbody += f'<tr style="background:{_bg}">{_tds}</tr>'
 
 _fvals = [
@@ -188,7 +283,13 @@ _js = (
     "if(typeof av==='number'&&typeof bv==='number')"
     "return dir==='asc'?av-bv:bv-av;"
     "return dir==='asc'?(av<bv?-1:av>bv?1:0):(bv<av?-1:bv>av?1:0);});"
-    "rows.forEach(function(r){t.tBodies[0].appendChild(r);});}"
+    "var reduce=window.matchMedia&&"
+    "window.matchMedia('(prefers-reduced-motion: reduce)').matches;"
+    "rows.forEach(function(r,i){"
+    "t.tBodies[0].appendChild(r);"
+    "if(!reduce&&r.animate)r.animate("
+    "[{opacity:0.35,transform:'translateY(6px)'},{opacity:1,transform:'none'}],"
+    "{duration:340,delay:Math.min(i,14)*22,easing:'cubic-bezier(.16,1,.3,1)'});});}"
     "</script>"
 )
 
@@ -197,8 +298,14 @@ _iframe_h = min(580, 48 + len(summary) * 38 + 48) + 4
 _html = (
     '<!DOCTYPE html><html><head><meta charset="utf-8">'
     '<style>body{margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}'
-    'tbody tr:hover{background:#f0f9ff!important}'
-    'thead th:hover{background:#f1f5f9!important}'
+    'table{font-variant-numeric:tabular-nums}'
+    'tbody tr{transition:background .2s ease,box-shadow .2s ease}'
+    'tbody tr:hover{background:#eff6ff!important;box-shadow:inset 3px 0 0 #2563eb}'
+    'tbody tr td:first-child{font-weight:600;color:#0f172a}'
+    'thead th{transition:background .2s ease,color .2s ease}'
+    'thead th:hover{background:#eff6ff!important;color:#2563eb}'
+    '.pill{display:inline-block;padding:2px 9px;border-radius:20px;'
+    'font-size:12px;font-weight:700;white-space:nowrap}'
     '</style></head><body>'
     '<table id="t" style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0">'
     f'<thead><tr>{_th}</tr></thead>'
@@ -212,78 +319,89 @@ components.html(_html, height=_iframe_h, scrolling=True)
 st.divider()
 
 # ─── Отсев и штрафы по школам ────────────────────────────────────────────────
+BARS_VISIBLE = 10   # столько баров видно сразу, остальные — под «Показать все»
+
+
+def _render_bars(rows: list[str]) -> None:
+    """Первые BARS_VISIBLE баров сразу, хвост — в раскрывающемся блоке."""
+    st.markdown("".join(rows[:BARS_VISIBLE]), unsafe_allow_html=True)
+    if len(rows) > BARS_VISIBLE:
+        with st.expander(f"Ещё {len(rows) - BARS_VISIBLE} школ"):
+            st.markdown("".join(rows[BARS_VISIBLE:]), unsafe_allow_html=True)
+
+
 col_left, col_right = st.columns(2)
 
 with col_left:
-    st.markdown("#### 📉 % отсева по школам")
-    sorted_dropout = summary.sort_values("Отсев %", ascending=False)
-    max_d = sorted_dropout["Отсев %"].max() or 1
-    bars_html = ""
-    for _, row in sorted_dropout.iterrows():
-        val = row["Отсев %"]
-        color = "red" if val >= 25 else "orange" if val >= 15 else "green"
-        bars_html += bar_row(row["Школа"], val, max_d, f"{val}%", color)
-    st.markdown(bars_html, unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown('<div class="sec-title">📉 % отсева по школам</div>', unsafe_allow_html=True)
+        sorted_dropout = summary.sort_values("Отсев %", ascending=False)
+        max_d = sorted_dropout["Отсев %"].max() or 1
+        rows_d = []
+        for _, row in sorted_dropout.iterrows():
+            val = row["Отсев %"]
+            color = "red" if val >= 25 else "orange" if val >= 15 else "green"
+            rows_d.append(bar_row(row["Школа"], val, max_d, f"{val}%", color))
+        _render_bars(rows_d)
 
 with col_right:
-    st.markdown("#### ⚠️ Штрафы по школам")
-    sorted_fines = summary.sort_values("Штрафы ₽", ascending=False)
-    max_f = sorted_fines["Штрафы ₽"].max() or 1
-    bars_html = ""
-    for _, row in sorted_fines.iterrows():
-        amount = int(row["Штрафы ₽"])
-        if amount > 0:
-            bars_html += bar_row(row["Школа"], amount, max_f,
-                                 f"{amount:,}₽".replace(",", " "), "orange")
-    if bars_html:
-        st.markdown(bars_html, unsafe_allow_html=True)
-    else:
-        st.success("Штрафов нет")
-
-st.divider()
+    with st.container(border=True):
+        st.markdown('<div class="sec-title">⚠️ Штрафы по школам</div>', unsafe_allow_html=True)
+        sorted_fines = summary.sort_values("Штрафы ₽", ascending=False)
+        max_f = sorted_fines["Штрафы ₽"].max() or 1
+        rows_f = []
+        for _, row in sorted_fines.iterrows():
+            amount = int(row["Штрафы ₽"])
+            if amount > 0:
+                rows_f.append(bar_row(row["Школа"], amount, max_f,
+                                      f"{amount:,}₽".replace(",", " "), "orange"))
+        if rows_f:
+            _render_bars(rows_f)
+        else:
+            st.success("Штрафов нет")
 
 # ─── Минутка дарования по школам ─────────────────────────────────────────────
-st.markdown("#### ✨ Минутка дарования по школам")
-sorted_mk = summary.sort_values("Минутка %", ascending=False)
-cols = st.columns(2)
-half = (len(sorted_mk) + 1) // 2
-
-for i, (_, row) in enumerate(sorted_mk.iterrows()):
-    col = cols[0] if i < half else cols[1]
-    mk_val = row["Минутка %"] if pd.notna(row["Минутка %"]) else 0.0
-    with col:
-        st.markdown(
-            bar_row(row["Школа"], mk_val, 100, f"{mk_val}%", "green"),
-            unsafe_allow_html=True
-        )
-
-st.divider()
-
-# ─── Рейтинг школ (NPS) ───────────────────────────────────────────────────────
-st.markdown("#### ⭐ Рейтинг школ")
-rated = summary[summary["Рейтинг"].notna()].sort_values("Рейтинг", ascending=False)
-
-if len(rated) > 0:
-    cols_r = st.columns(2)
-    half_r = (len(rated) + 1) // 2
-    for i, (_, row) in enumerate(rated.iterrows()):
-        col = cols_r[0] if i < half_r else cols_r[1]
-        r_val = row["Рейтинг"]
-        color = "green" if r_val >= 9 else "orange" if r_val >= 7 else "red"
+with st.container(border=True):
+    st.markdown('<div class="sec-title">✨ Минутка дарования по школам</div>',
+                unsafe_allow_html=True)
+    sorted_mk = summary.sort_values("Минутка %", ascending=False)
+    cols = st.columns(2)
+    half = (len(sorted_mk) + 1) // 2
+    for i, (_, row) in enumerate(sorted_mk.iterrows()):
+        col = cols[0] if i < half else cols[1]
+        mk_val = row["Минутка %"] if pd.notna(row["Минутка %"]) else 0.0
         with col:
             st.markdown(
-                bar_row(row["Школа"], r_val, 10, f"{r_val:.2f}", color),
+                bar_row(row["Школа"], mk_val, 100, f"{mk_val}%", "green"),
                 unsafe_allow_html=True
             )
-    not_rated = summary[summary["Рейтинг"].isna()]["Школа"].tolist()
-    if not_rated:
-        st.markdown(
-            f"<div style='margin-top:8px;font-size:0.7rem;color:#94a3b8'>Пока нет отзывов: "
-            f"{escape(', '.join(not_rated))}</div>",
-            unsafe_allow_html=True
-        )
-else:
-    st.info("Пока нет отзывов по школам этого потока")
+
+# ─── Рейтинг школ (NPS) ───────────────────────────────────────────────────────
+with st.container(border=True):
+    st.markdown('<div class="sec-title">⭐ Рейтинг школ</div>', unsafe_allow_html=True)
+    rated = summary[summary["Рейтинг"].notna()].sort_values("Рейтинг", ascending=False)
+
+    if len(rated) > 0:
+        cols_r = st.columns(2)
+        half_r = (len(rated) + 1) // 2
+        for i, (_, row) in enumerate(rated.iterrows()):
+            col = cols_r[0] if i < half_r else cols_r[1]
+            r_val = row["Рейтинг"]
+            color = "green" if r_val >= 9 else "orange" if r_val >= 7 else "red"
+            with col:
+                st.markdown(
+                    bar_row(row["Школа"], r_val, 10, f"{r_val:.2f}", color),
+                    unsafe_allow_html=True
+                )
+        not_rated = summary[summary["Рейтинг"].isna()]["Школа"].tolist()
+        if not_rated:
+            st.markdown(
+                f"<div style='margin-top:8px;font-size:0.7rem;color:#94a3b8'>Пока нет отзывов: "
+                f"{escape(', '.join(not_rated))}</div>",
+                unsafe_allow_html=True
+            )
+    else:
+        st.info("Пока нет отзывов по школам этого потока")
 
 st.divider()
 

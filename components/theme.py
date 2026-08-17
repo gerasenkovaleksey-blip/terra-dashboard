@@ -54,6 +54,46 @@ TERRA_CSS = """
 .bar-fill-red    { height: 100%; background: linear-gradient(90deg, #b91c1c, #f87171); border-radius: 4px; }
 .bar-fill-green  { height: 100%; background: linear-gradient(90deg, #15803d, #4ade80); border-radius: 4px; }
 .bar-fill-orange { height: 100%; background: linear-gradient(90deg, #c2410c, #fb923c); border-radius: 4px; }
+
+/* Бары «вырастают» при отрисовке.
+   Масштабируем через transform, а не width — inline-ширина остаётся нетронутой,
+   поэтому bar_row() не нужно менять. */
+.bar-fill-blue, .bar-fill-red, .bar-fill-green, .bar-fill-orange {
+    transform-origin: left center;
+    animation: barGrow 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes barGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Подсветка строки бара при наведении */
+.bar-row {
+    padding: 2px 6px;
+    border-radius: 6px;
+    transition: background 0.2s ease;
+}
+.bar-row:hover { background: #f1f5f9; }
+
+/* Секции-карточки (st.container(border=True)) в бенто-стиле */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 14px !important;
+    border-color: #e2e8f0 !important;
+    background: #ffffff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    transition: box-shadow 0.35s ease;
+}
+div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.10);
+}
+
+/* Заголовок секции внутри карточки */
+.sec-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 12px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .bar-fill-blue, .bar-fill-red, .bar-fill-green, .bar-fill-orange { animation: none; }
+}
 </style>
 """
 
@@ -86,7 +126,7 @@ def bar_row(label: str, value: float, max_value: float, display: str, color_clas
     safe_color = color_class if color_class in color_map else "blue"
     text_color = color_map[safe_color]
     return f"""
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <div class="bar-row" style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <div style="font-size:0.7rem;color:#64748b;width:180px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{escape(str(label))}</div>
         <div class="bar-track" style="flex:1"><div class="bar-fill-{safe_color}" style="width:{pct}%"></div></div>
         <div style="font-size:0.75rem;font-weight:700;color:{text_color};min-width:60px;text-align:right">{escape(str(display))}</div>
