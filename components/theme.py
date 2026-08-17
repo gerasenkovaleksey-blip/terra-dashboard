@@ -1,6 +1,39 @@
 import streamlit as st
 from html import escape
 
+# ─── Фирменные цвета кластеров ────────────────────────────────────────────────
+# Взяты с официальной инфографики TERRA (плашки кластеров).
+# Единственное место, где они заданы — используются и в таблице сводной,
+# и в шапке страницы школы.
+CLUSTER_COLORS: dict[str, str] = {
+    "Здоровье":  "#4CA24E",
+    "Стратегия": "#1F6FB2",
+    "Маркетинг": "#F0632A",
+    "Бизнес":    "#F7B32B",
+    "Навыки":    "#7B4FA5",
+    "Финансы":   "#35B5A8",
+}
+
+# Запасные цвета для кластеров, которых ещё нет в CLUSTER_COLORS
+_CLUSTER_FALLBACK = ["#0284c7", "#e11d48", "#ca8a04", "#7c3aed", "#0d9488"]
+
+DEFAULT_ACCENT = "#2563eb"
+
+
+def cluster_color(name) -> str:
+    """
+    Цвет кластера по названию. Незнакомые кластеры получают цвет из запасной
+    палитры детерминированно (по имени), чтобы он не менялся между перерисовками.
+    """
+    if name is None:
+        return DEFAULT_ACCENT
+    key = str(name).strip()
+    if key in CLUSTER_COLORS:
+        return CLUSTER_COLORS[key]
+    if not key or key == "—":
+        return DEFAULT_ACCENT
+    return _CLUSTER_FALLBACK[sum(map(ord, key)) % len(_CLUSTER_FALLBACK)]
+
 TERRA_CSS = """
 <style>
 .block-container { padding-top: 3.5rem !important; padding-bottom: 5rem !important; }
@@ -84,6 +117,34 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover {
     box-shadow: 0 10px 26px rgba(15, 23, 42, 0.10);
 }
 
+/* Кольцевые gauge-виджеты (минутка, рейтинг школы).
+   ВАЖНО: сам conic-gradient задаётся инлайном с готовыми значениями.
+   Streamlit прогоняет HTML из st.markdown через санитайзер, который вырезает
+   CSS-переменные (--c, --pct) из атрибута style — поэтому вариант с var()
+   тут не работает, проверено. Анимация — появление, а не «дозаливка». */
+.gauge {
+    position: relative;
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: gaugeIn 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes gaugeIn {
+    from { opacity: 0; transform: scale(0.88) rotate(-25deg); }
+    to   { opacity: 1; transform: none; }
+}
+.gauge-hole {
+    position: absolute;
+    inset: 8px;
+    border-radius: 50%;
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    font-weight: 800;
+    line-height: 1;
+}
+
 /* Заголовок секции внутри карточки */
 .sec-title {
     font-size: 0.85rem;
@@ -93,6 +154,7 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover {
 }
 @media (prefers-reduced-motion: reduce) {
     .bar-fill-blue, .bar-fill-red, .bar-fill-green, .bar-fill-orange { animation: none; }
+    .gauge { animation: none; }
 }
 </style>
 """

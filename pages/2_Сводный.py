@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from html import escape
 import streamlit.components.v1 as components
-from components.theme import inject_css, bar_row
+from components.theme import inject_css, bar_row, cluster_color, DEFAULT_ACCENT
 from components.bento import bento_header_html
 from data.loader import (
     load_registry, load_minutka, load_all_schools_summary, load_all_fines_detail,
@@ -157,6 +157,11 @@ components.html(
                      if rated_count else "Нет оценок"),
         schools_note=f"{len(summary)} школ · поток {selected_stream}",
         trend_note=trend_note,
+        # Когда выбран конкретный кластер — красим шапку в его фирменный цвет
+        accent=(cluster_color(selected_cluster)
+                if selected_cluster != "Все кластеры" else DEFAULT_ACCENT),
+        pill=({"text": selected_cluster, "color": cluster_color(selected_cluster)}
+              if selected_cluster != "Все кластеры" else None),
     ),
     height=290,
 )
@@ -198,16 +203,6 @@ _th = "".join(
     for i, h in enumerate(_heads)
 )
 
-# Цвет кластера — детерминированно по алфавитному порядку, чтобы не «прыгал»
-# между перерисовками при смене фильтров.
-_CLUSTER_PALETTE = ["#2563eb", "#f97316", "#8b5cf6", "#0d9488", "#e11d48",
-                    "#ca8a04", "#0284c7", "#7c3aed"]
-_cluster_color = {
-    name: _CLUSTER_PALETTE[i % len(_CLUSTER_PALETTE)]
-    for i, name in enumerate(sorted(summary["Кластер"].dropna().unique()))
-}
-
-
 def _dropout_color(v) -> str:
     if pd.isna(v):
         return "#334155"
@@ -229,7 +224,7 @@ for _i, (_, _row) in enumerate(summary.iterrows()):
         _extra = ""
         if _c == "Кластер":
             _name = str(_v) if pd.notna(_v) else ""
-            _col = _cluster_color.get(_name, "#64748b")
+            _col = cluster_color(_name)
             _tds += (f'<td style="{_TD}"><span class="pill" '
                      f'style="background:{_col}18;color:{_col}">{escape(_name)}</span></td>')
             continue

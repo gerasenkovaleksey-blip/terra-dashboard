@@ -39,6 +39,24 @@ def _fmt_attrs(kpi: dict) -> str:
     )
 
 
+def format_value(kpi: dict) -> str:
+    """
+    Финальное значение KPI ровно в том виде, в каком его нарисует JS-счётчик.
+
+    Пишется прямо в HTML, чтобы правильное число было на экране ещё до того,
+    как отработает анимация. Если JS или requestAnimationFrame не сработают
+    (фоновая вкладка, экономия энергии, старый браузер) — пользователь увидит
+    настоящее число, а не ноль.
+    """
+    num = kpi["num"]
+    suffix = kpi.get("suf", "")
+    if kpi.get("sep"):
+        body = f"{int(round(float(num))):,}".replace(",", " ")
+    else:
+        body = f"{float(num):.{kpi.get('dec', 0)}f}"
+    return body + suffix
+
+
 def _kpi_cell(kpi: dict) -> str:
     color = kpi.get("color", "#2563eb")
     spark = ""
@@ -54,7 +72,7 @@ def _kpi_cell(kpi: dict) -> str:
     <div class="cell k" style="--c:{color}">
       {icon_html}
       <div class="lab">{escape(str(kpi["label"]))}</div>
-      <div class="val" {_fmt_attrs(kpi)}>0</div>
+      <div class="val" {_fmt_attrs(kpi)}>{escape(format_value(kpi))}</div>
       {spark}
     </div>"""
 
@@ -67,6 +85,9 @@ def bento_header_html(
     rating_note: str,
     schools_note: str,
     trend_note: str,
+    accent: str = "#2563eb",
+    pill: dict | None = None,
+    rating_label: str = "Средний рейтинг",
 ) -> str:
     """
     Полный HTML-документ для components.html: шапка (3 плитки) + ряд KPI.
@@ -74,7 +95,15 @@ def bento_header_html(
     kpis — список словарей:
       label (str), num (float), dec (int), sep (bool), suf (str),
       color (str), icon (str), series (list[float] | None)
+    accent — цвет акцента шапки (обычно цвет кластера).
+    pill   — {"text": ..., "color": ...}: плашка рядом с заголовком.
     """
+    pill_html = ""
+    if pill and pill.get("text"):
+        p_color = pill.get("color", accent)
+        pill_html = (f'<span class="pill" style="background:{p_color}1a;color:{p_color}">'
+                     f'{escape(str(pill["text"]))}</span>')
+
     if avg_rating is not None:
         r_color = "#22c55e" if avg_rating >= 9 else "#f97316" if avg_rating >= 7 else "#ef4444"
         r_pct = max(0.0, min(100.0, avg_rating / 10 * 100))
@@ -83,14 +112,16 @@ def bento_header_html(
         offset = dash * (1 - r_pct / 100)
         rating_cell = f"""
       <div class="cell head-rate" style="--c:{r_color}">
-        <div class="lab">Средний рейтинг</div>
+        <div class="lab">{escape(rating_label)}</div>
         <div class="hr-body">
-          <svg class="ring" viewBox="0 0 72 72" aria-hidden="true">
-            <circle class="ring-bg" cx="36" cy="36" r="30"/>
-            <circle class="ring-fg" cx="36" cy="36" r="30"
-                    style="stroke:{r_color};stroke-dasharray:{dash};--off:{offset:.1f}"/>
-          </svg>
-          <div class="ring-num" style="color:{r_color}">{avg_rating:.2f}</div>
+          <div class="ring-wrap">
+            <svg class="ring" viewBox="0 0 72 72" aria-hidden="true">
+              <circle class="ring-bg" cx="36" cy="36" r="30"/>
+              <circle class="ring-fg" cx="36" cy="36" r="30"
+                      style="stroke:{r_color};stroke-dasharray:{dash};--off:{offset:.1f}"/>
+            </svg>
+            <div class="ring-num" style="color:{r_color}">{avg_rating:.2f}</div>
+          </div>
           <div class="hr-txt">
             <div class="hr-verdict" style="color:{r_color}">
                 {"Отлично" if avg_rating >= 9 else "Хорошо" if avg_rating >= 7 else "Требует внимания"}
@@ -100,9 +131,9 @@ def bento_header_html(
         </div>
       </div>"""
     else:
-        rating_cell = """
+        rating_cell = f"""
       <div class="cell head-rate" style="--c:#94a3b8">
-        <div class="lab">Средний рейтинг</div>
+        <div class="lab">{escape(rating_label)}</div>
         <div class="hr-empty">Пока нет отзывов</div>
       </div>"""
 
@@ -114,14 +145,17 @@ body{{margin:0;font-family:"Source Sans Pro","Segoe UI",-apple-system,sans-serif
 .wrap{{display:flex;flex-direction:column;gap:12px}}
 .bento{{display:grid;gap:12px}}
 
+/* Базовое состояние — КОНЕЧНОЕ (карточка видна, полоска на месте), анимация
+   проигрывается «из» пустого. Если анимации не отработают, страница выглядит
+   правильно, а не пустой. */
 .cell{{position:relative;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 16px;
-  overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);opacity:0;transform:translateY(14px);
-  animation:up .55s cubic-bezier(.16,1,.3,1) forwards;
+  overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);
+  animation:up .55s cubic-bezier(.16,1,.3,1) both;
   transition:transform .4s cubic-bezier(.16,1,.3,1),box-shadow .4s,border-color .4s}}
 .cell::before{{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--c,#2563eb);
-  transform:scaleX(0);transform-origin:left;animation:barIn .7s cubic-bezier(.16,1,.3,1) .2s forwards}}
-@keyframes up{{to{{opacity:1;transform:none}}}}
-@keyframes barIn{{to{{transform:scaleX(1)}}}}
+  transform-origin:left;animation:barIn .7s cubic-bezier(.16,1,.3,1) .2s both}}
+@keyframes up{{from{{opacity:0;transform:translateY(14px)}}}}
+@keyframes barIn{{from{{transform:scaleX(0)}}}}
 .cell:hover{{transform:translateY(-4px);border-color:var(--c);box-shadow:0 14px 34px rgba(15,23,42,.13)}}
 .lab{{font-size:.6rem;color:#94a3b8;text-transform:uppercase;letter-spacing:1px}}
 
@@ -129,20 +163,26 @@ body{{margin:0;font-family:"Source Sans Pro","Segoe UI",-apple-system,sans-serif
 .head{{grid-template-columns:1.7fr 1.3fr .9fr}}
 .head-main{{display:flex;flex-direction:column;justify-content:center;gap:10px}}
 .hm-top{{display:flex;align-items:center;gap:12px}}
-.terra-ring{{width:32px;height:32px;border-radius:50%;border:2.5px solid #2563eb;flex-shrink:0;
+.terra-ring{{width:32px;height:32px;border-radius:50%;border:2.5px solid var(--c);flex-shrink:0;
   animation:pulse 3.2s ease-in-out infinite}}
-@keyframes pulse{{0%,100%{{box-shadow:0 0 0 0 rgba(37,99,235,.35)}}50%{{box-shadow:0 0 0 7px rgba(37,99,235,0)}}}}
+@keyframes pulse{{
+  0%,100%{{box-shadow:0 0 0 0 color-mix(in srgb,var(--c) 35%,transparent)}}
+  50%{{box-shadow:0 0 0 7px color-mix(in srgb,var(--c) 0%,transparent)}}}}
+.hm-titleline{{display:flex;align-items:center;gap:9px;flex-wrap:wrap}}
 .hm-title{{font-size:1.2rem;font-weight:700;color:#1e293b;line-height:1.15}}
-.hm-sub{{font-size:.65rem;color:#2563eb;letter-spacing:2px;text-transform:uppercase;margin-top:3px}}
+.hm-sub{{font-size:.65rem;color:var(--c);letter-spacing:2px;text-transform:uppercase;margin-top:3px}}
+.pill{{display:inline-block;padding:3px 10px;border-radius:20px;font-size:.62rem;font-weight:700;
+  letter-spacing:.5px;white-space:nowrap}}
 
-.head-rate .hr-body{{display:flex;align-items:center;gap:12px;margin-top:8px;position:relative}}
-.ring{{width:64px;height:64px;flex-shrink:0;transform:rotate(-90deg)}}
+.head-rate .hr-body{{display:flex;align-items:center;gap:12px;margin-top:8px}}
+.ring-wrap{{position:relative;width:64px;height:64px;flex-shrink:0}}
+.ring{{display:block;width:64px;height:64px;transform:rotate(-90deg)}}
 .ring-bg{{fill:none;stroke:#e2e8f0;stroke-width:7}}
-.ring-fg{{fill:none;stroke-width:7;stroke-linecap:round;stroke-dashoffset:188.5;
-  animation:ringIn 1.2s cubic-bezier(.16,1,.3,1) .25s forwards}}
-@keyframes ringIn{{to{{stroke-dashoffset:var(--off)}}}}
-.ring-num{{position:absolute;left:0;top:8px;width:64px;height:64px;display:flex;align-items:center;
-  justify-content:center;font-size:.95rem;font-weight:800;pointer-events:none}}
+.ring-fg{{fill:none;stroke-width:7;stroke-linecap:round;stroke-dashoffset:var(--off);
+  animation:ringIn 1.2s cubic-bezier(.16,1,.3,1) .25s both}}
+@keyframes ringIn{{from{{stroke-dashoffset:188.5}}}}
+.ring-num{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:.95rem;font-weight:800;line-height:1;pointer-events:none}}
 .hr-verdict{{font-size:.9rem;font-weight:700}}
 .hr-note{{font-size:.62rem;color:#94a3b8;margin-top:4px;line-height:1.45}}
 .hr-empty{{margin-top:14px;font-size:.8rem;color:#94a3b8}}
@@ -164,9 +204,9 @@ body{{margin:0;font-family:"Source Sans Pro","Segoe UI",-apple-system,sans-serif
   font-variant-numeric:tabular-nums}}
 .spk{{display:block;width:100%;height:22px;margin-top:7px}}
 .spk path{{fill:none;stroke:var(--c);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;
-  opacity:.4;stroke-dasharray:200;stroke-dashoffset:200;
-  animation:draw 1.3s cubic-bezier(.16,1,.3,1) .4s forwards;transition:opacity .3s}}
-@keyframes draw{{to{{stroke-dashoffset:0}}}}
+  opacity:.4;stroke-dasharray:200;stroke-dashoffset:0;
+  animation:draw 1.3s cubic-bezier(.16,1,.3,1) .4s both;transition:opacity .3s}}
+@keyframes draw{{from{{stroke-dashoffset:200}}}}
 .k:hover .spk path{{opacity:1}}
 
 @media (max-width:900px){{
@@ -179,11 +219,14 @@ body{{margin:0;font-family:"Source Sans Pro","Segoe UI",-apple-system,sans-serif
 </style></head><body>
 <div class="wrap">
   <div class="bento head">
-    <div class="cell head-main" style="--c:#2563eb">
+    <div class="cell head-main" style="--c:{accent}">
       <div class="hm-top">
         <div class="terra-ring"></div>
         <div>
-          <div class="hm-title">{escape(title)}</div>
+          <div class="hm-titleline">
+            <span class="hm-title">{escape(title)}</span>
+            {pill_html}
+          </div>
           <div class="hm-sub">{escape(subtitle)}</div>
         </div>
       </div>
@@ -199,7 +242,8 @@ body{{margin:0;font-family:"Source Sans Pro","Segoe UI",-apple-system,sans-serif
 </div>
 <script>
 (function(){{
-  function sep(n){{return String(n).replace(/\\B(?=(\\d{{3}})+(?!\\d))/g," ");}}
+  var NBSP=String.fromCharCode(160);   // тот же разделитель, что и в format_value()
+  function sep(n){{return String(n).replace(/\B(?=(\d{{3}})+(?!\d))/g,NBSP);}}
   function ease(t){{return 1-Math.pow(1-t,3);}}
   var reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   document.querySelectorAll("[data-count]").forEach(function(el,i){{
