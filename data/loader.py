@@ -524,6 +524,190 @@ def load_school_ratings() -> pd.DataFrame:
     return result
 
 
+@st.cache_data(ttl=3600)
+def load_nps_answers() -> pd.DataFrame:
+    """
+    Сырые ответы формы НПС: школа + дата заполнения.
+    Returns DataFrame с колонками: Школа, Дата (datetime.date).
+    """
+    df = _parse_sheet(NPS_SPREADSHEET_ID, NPS_ANSWERS_SHEET)
+    school_col = _find_col(df, ["По какой школе оставляешь обратную связь?"], "Школа")
+    time_col = _find_col(df, ["Отметка времени", "Timestamp"], "Отметка времени")
+    parsed = pd.to_datetime(df[time_col], errors="coerce")
+    out = pd.DataFrame({
+        "Школа": df[school_col].astype(str).str.strip(),
+        "Дата": parsed.map(lambda x: x.date() if pd.notna(x) else None),
+    })
+    return out[out["Дата"].notna() & (out["Школа"] != "nan")].reset_index(drop=True)
+
+
+@st.cache_data(ttl=3600)
+def load_lessons(sheet_id: str) -> pd.DataFrame:
+    """
+    Занятия школы с датами — без отбрасывания незаполненных строк.
+
+    Отличие от load_minutka(): та выкидывает строки без количества учеников,
+    а для контроля заполнения именно они и нужны — это занятия, по которым
+    отчётность не внесли.
+
+    Returns DataFrame: Поток, Занятие, Дата, Учеников, Записано_форм.
+    """
+    df = _parse_sheet(sheet_id, "МИНУТКА_ДАРОВАНИЯ")
+    if len(df) == 0 or "Дата" not in df.columns:
+        return pd.DataFrame(columns=["Поток", "Занятие", "Дата", "Учеников", "Записано_форм"])
+
+    raw = df["Дата"]
+    if isinstance(raw, pd.DataFrame):      # в отдельных таблицах колонка задвоена
+        raw = raw.iloc[:, 0]
+    parsed = pd.to_datetime(raw, errors="coerce")
+
+    lesson_col   = _find_col(df, _LESSON_COL_ALIASES, "Занятие")
+    stream_col   = _find_col(df, _STREAM_COL_ALIASES, "Поток")
+    students_col = _find_col(df, _STUDENTS_COL_ALIASES, "Количество учеников в школе")
+    forms_col    = _find_col(df, _FORMS_COL_ALIASES, "Количество сданных форм")
+
+    out = pd.DataFrame({
+        "Поток":         pd.to_numeric(df[stream_col], errors="coerce"),
+        "Занятие":       pd.to_numeric(df[lesson_col], errors="coerce"),
+        # .map, а не .dt.date: dtype колонки различается от таблицы к таблице
+        "Дата":          parsed.map(lambda x: x.date() if pd.notna(x) else None),
+        "Учеников":      _to_numeric_clean(df[students_col]),
+        "Записано_форм": _to_numeric_clean(df[forms_col]),
+    })
+    return out[out["Дата"].notna()].reset_index(drop=True)
+
+
+# Сколько дней после занятия форма ещё считается сданной вовремя.
+# Регламент: в день занятия или на следующий.
+NPS_WINDOW_DAYS = 1
+# Насколько дата занятия может «съехать», чтобы заподозрить опечатку, а не незаполнение
+DATE_SUSPECT_DAYS = 3
+
+
+@st.cache_data(ttl=3600)
+def build_control_report() -> dict:
+    """
+    Сверяет записанное количество сданных форм с фактическим числом ответов НПС.
+
+    Ответ засчитывается занятию, если пришёл в день занятия или на следующий —
+    это регламент, а не эвристика.
+
+    Returns dict:
+      lessons   — DataFrame по занятиям со статусом расхождения
+      no_dates  — школы, у которых в минутке нет дат, но НПС идёт
+      late      — ответы, не попавшие в окно ни одного занятия
+      period    — (первая дата НПС, последняя дата НПС)
+    """
+    import datetime as _dt
+
+    answers = load_nps_answers()
+    if len(answers) == 0:
+        return {"lessons": pd.DataFrame(), "no_dates": pd.DataFrame(),
+                "late": pd.DataFrame(), "period": (None, None)}
+
+    lo, hi = answers["Дата"].min(), answers["Дата"].max()
+    registry = load_registry()
+
+    lesson_rows, no_dates_rows, late_rows = [], [], []
+
+    for _, school in registry.iterrows():
+        name = str(school["Школа"]).strip()
+        sid = school["sheet_id"]
+        sub = answers[answers["Школа"] == name]
+
+        # pd.notna: у школ без ссылки sheet_id приходит как NaN, а NaN истинный —
+        # простая проверка `if sid` пропустила бы его и дала запрос к .../d/nan/
+        has_sheet = pd.notna(sid) and str(sid).strip() not in ("", "nan", "None")
+        try:
+            lessons = load_lessons(sid) if has_sheet else pd.DataFrame()
+        except Exception as e:
+            logger.warning("Контроль: не удалось прочитать занятия школы %s: %s", name, e)
+            lessons = pd.DataFrame()
+
+        in_period = lessons[lessons["Дата"].map(lambda d: lo <= d <= hi)] if len(lessons) else lessons
+
+        if len(in_period) == 0:
+            if len(sub):
+                by_day = sorted(sub["Дата"].value_counts().items())
+                no_dates_rows.append({
+                    "Школа": name,
+                    "Кластер": school.get("Кластер"),
+                    "Ответов": len(sub),
+                    "Дни по НПС": " · ".join(f"{d:%d.%m} ({c})" for d, c in by_day if c >= 3),
+                })
+            continue
+
+        covered = set()
+        for _, lr in in_period.sort_values("Дата").iterrows():
+            start = lr["Дата"]
+            window = [start + _dt.timedelta(days=k) for k in range(NPS_WINDOW_DAYS + 1)]
+            covered.update(window)
+            fact = int(sub["Дата"].isin(window).sum())
+            written = lr["Записано_форм"]
+            has_written = pd.notna(written)
+
+            if not has_written:
+                if fact == 0:
+                    continue                      # занятие ещё не прошло — не про что отчитываться
+                status = "Форм нет"
+                diff = None
+            else:
+                written = int(written)
+                diff = fact - written
+                if diff == 0:
+                    status = "Совпало"
+                elif diff > 0:
+                    status = "Кураторы / открытый"
+                elif fact == 0 and _has_nearby_answers(sub, start):
+                    # Ответы есть, но рядом с указанной датой, а не в ней.
+                    # Это похоже на опечатку в дате, а не на то, что школа не собрала формы —
+                    # обвинять её в незаполнении было бы несправедливо.
+                    status = "Проверить дату"
+                else:
+                    status = "Не заполнили"
+
+            lesson_rows.append({
+                "Школа": name,
+                "Кластер": school.get("Кластер"),
+                "Поток": lr["Поток"],
+                "Занятие": lr["Занятие"],
+                "Дата": start,
+                "Учеников": lr["Учеников"],
+                "Записано": int(written) if has_written else None,
+                "Факт": fact,
+                "Разница": diff,
+                "Статус": status,
+            })
+
+        late = sub[~sub["Дата"].isin(covered)]
+        if len(late):
+            by_day = sorted(late["Дата"].value_counts().items())
+            peak_day, peak_n = max(by_day, key=lambda x: x[1])
+            late_rows.append({
+                "Школа": name,
+                "Ответов": len(late),
+                "Дни": " · ".join(f"{d:%d.%m} ({c})" for d, c in by_day),
+                # Крупное скопление в один день — это, скорее всего, занятие,
+                # которого просто нет в таблице, а не толпа опоздавших
+                "Похоже на занятие": f"{peak_day:%d.%m}" if peak_n >= 5 else "",
+            })
+
+    return {
+        "lessons": pd.DataFrame(lesson_rows),
+        "no_dates": pd.DataFrame(no_dates_rows),
+        "late": pd.DataFrame(late_rows),
+        "period": (lo, hi),
+    }
+
+
+def _has_nearby_answers(school_answers: pd.DataFrame, lesson_date) -> bool:
+    """Есть ли ответы в пределах DATE_SUSPECT_DAYS от даты занятия."""
+    import datetime as _dt
+    lo = lesson_date - _dt.timedelta(days=DATE_SUSPECT_DAYS)
+    hi = lesson_date + _dt.timedelta(days=DATE_SUSPECT_DAYS)
+    return bool(school_answers["Дата"].map(lambda d: lo <= d <= hi).any())
+
+
 def get_school_rating(ratings: pd.DataFrame, school_name: str) -> dict | None:
     """Return {"score": float, "count": int} for a school, or None if no data."""
     row = ratings[ratings["Школа"] == school_name]
