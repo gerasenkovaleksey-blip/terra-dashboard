@@ -3,7 +3,10 @@ import pandas as pd
 from html import escape
 import streamlit.components.v1 as components
 from components.theme import inject_css, kpi_card, bar_row
-from data.loader import load_registry, load_minutka, load_all_schools_summary, load_all_fines_detail
+from data.loader import (
+    load_registry, load_minutka, load_all_schools_summary, load_all_fines_detail,
+    load_school_ratings,
+)
 
 st.set_page_config(page_title="TERRA · Сводный", page_icon="📊", layout="wide")
 inject_css()
@@ -52,6 +55,10 @@ if selected_cluster != "Все кластеры":
     summary = summary[summary["Кластер"] == selected_cluster]
 if selected_school_filter != "Все школы":
     summary = summary[summary["Школа"] == selected_school_filter]
+
+# Рейтинг школ (0-10) — общий по всем потокам, не привязан к выбранному потоку
+ratings = load_school_ratings()
+summary = summary.merge(ratings[["Школа", "Рейтинг", "Отзывов"]], on="Школа", how="left")
 
 # ─── Заголовок ───────────────────────────────────────────────────────────────
 cluster_label = escape(selected_cluster) if selected_cluster != "Все кластеры" else "Все кластеры"
@@ -105,6 +112,7 @@ avg_per_start  = int(round(total_assigned_sum / total_start_sum))  if total_star
 avg_per_finish = int(round(total_assigned_sum / total_finish_sum)) if total_finish_sum > 0 else 0
 avg_dropout_val = round(summary["Отсев %"].mean(), 1)
 avg_minutka_val = round(summary["Минутка %"].mean(), 1)
+avg_rating_val  = round(summary["Рейтинг"].mean(), 2) if summary["Рейтинг"].notna().any() else None
 
 _TH = ("position:sticky;top:0;background:#f8fafc;padding:8px 12px;text-align:left;"
        "font-size:13px;color:#1e293b;font-weight:700;border-bottom:2px solid #e2e8f0;"
@@ -115,9 +123,9 @@ _TF = ("padding:8px 12px;font-size:13px;font-weight:700;color:#1e293b;"
        "border-top:2px solid #2563eb;z-index:2;white-space:nowrap")
 
 _heads = ["Школа","Кластер","Старт","Финиш","Отсев %","Назначено ₽",
-          "Штрафы ₽","На 1 уч. (старт)","На 1 уч. (финиш)","Минутка %"]
+          "Штрафы ₽","На 1 уч. (старт)","На 1 уч. (финиш)","Минутка %","Рейтинг"]
 _cols  = ["Школа","Кластер","Старт","Финиш","Отсев %","Штрафов назначено ₽",
-          "Штрафы ₽","На 1 ученика (старт)","На 1 ученика (финиш)","Минутка %"]
+          "Штрафы ₽","На 1 ученика (старт)","На 1 ученика (финиш)","Минутка %","Рейтинг"]
 _rub   = {"Штрафы ₽","Штрафов назначено ₽","На 1 ученика (старт)","На 1 ученика (финиш)"}
 
 def _r(x): return f"{int(x):,}₽".replace(",", " ")
@@ -137,6 +145,7 @@ for _i, (_, _row) in enumerate(summary.iterrows()):
         if _c in _rub:          _v = _r(_v)
         elif _c == "Отсев %":   _v = f"{_v}%"
         elif _c == "Минутка %": _v = f"{_v}%"
+        elif _c == "Рейтинг":   _v = f"{_v:.2f}" if pd.notna(_v) else "—"
         else: _v = str(_v) if pd.notna(_v) else ""
         _tds += f'<td style="{_TD}">{escape(str(_v))}</td>'
     _tbody += f'<tr style="background:{_bg}">{_tds}</tr>'
@@ -148,6 +157,7 @@ _fvals = [
     _r(total_assigned_sum), _r(total_paid_sum),
     _r(avg_per_start), _r(avg_per_finish),
     f"{avg_minutka_val}%",
+    f"{avg_rating_val:.2f}" if avg_rating_val is not None else "—",
 ]
 _tfoot = "".join(f'<td style="{_TF}">{escape(v)}</td>' for v in _fvals)
 
@@ -243,6 +253,34 @@ for i, (_, row) in enumerate(sorted_mk.iterrows()):
             bar_row(row["Школа"], mk_val, 100, f"{mk_val}%", "green"),
             unsafe_allow_html=True
         )
+
+st.divider()
+
+# ─── Рейтинг школ (NPS) ───────────────────────────────────────────────────────
+st.markdown("#### ⭐ Рейтинг школ")
+rated = summary[summary["Рейтинг"].notna()].sort_values("Рейтинг", ascending=False)
+
+if len(rated) > 0:
+    cols_r = st.columns(2)
+    half_r = (len(rated) + 1) // 2
+    for i, (_, row) in enumerate(rated.iterrows()):
+        col = cols_r[0] if i < half_r else cols_r[1]
+        r_val = row["Рейтинг"]
+        color = "green" if r_val >= 9 else "orange" if r_val >= 7 else "red"
+        with col:
+            st.markdown(
+                bar_row(row["Школа"], r_val, 10, f"{r_val:.2f}", color),
+                unsafe_allow_html=True
+            )
+    not_rated = summary[summary["Рейтинг"].isna()]["Школа"].tolist()
+    if not_rated:
+        st.markdown(
+            f"<div style='margin-top:8px;font-size:0.7rem;color:#94a3b8'>Пока нет отзывов: "
+            f"{escape(', '.join(not_rated))}</div>",
+            unsafe_allow_html=True
+        )
+else:
+    st.info("Пока нет отзывов по школам этого потока")
 
 st.divider()
 
