@@ -1,6 +1,7 @@
 import re
 import io
 import logging
+import urllib.parse
 
 import requests
 import streamlit as st
@@ -438,3 +439,57 @@ def load_all_fines_detail(stream: int) -> pd.DataFrame:
                            school_row.get("Школа", "?"), sid, e)
             continue
     return pd.DataFrame(rows, columns=["Школа", "Кластер", "Причина штрафа", "Сумма погашения"])
+
+# ─── Рейтинг школ (NPS / удовлетворённость) ──────────────────────────────────
+
+NPS_SPREADSHEET_ID = "1VnCUPhFxhI5MbWzRMBsGy5XLkwQhOglpY2D3_TlII7s"
+NPS_RATING_SHEET   = "Рейтинг школ по нпс"
+NPS_ANSWERS_SHEET  = "Ответы на форму (1)"
+
+
+@st.cache_data(ttl=3600)
+def load_school_ratings() -> pd.DataFrame:
+    """
+    Load average satisfaction rating (0-10) per school from the общий feedback-таблица.
+    Ratings come from a Google Sheets pivot table that only exports correctly via the
+    gviz CSV endpoint (regular XLSX export drops computed pivot values for this sheet).
+    Response counts come from the raw form-answers sheet via the normal XLSX parser.
+    Returns DataFrame with columns: Школа, Рейтинг (float), Отзывов (int).
+    """
+    encoded = urllib.parse.quote(NPS_RATING_SHEET)
+    url = (
+        f"https://docs.google.com/spreadsheets/d/{NPS_SPREADSHEET_ID}"
+        f"/gviz/tq?tqx=out:csv&sheet={encoded}"
+    )
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+    ratings = pd.read_csv(io.StringIO(resp.content.decode("utf-8")))
+    ratings.columns = ["Школа", "Рейтинг"]
+    ratings = ratings[ratings["Школа"] != "Итого"].copy()
+    ratings["Рейтинг"] = pd.to_numeric(
+        ratings["Рейтинг"].astype(str).str.replace(",", ".", regex=False), errors="coerce"
+    )
+    ratings = ratings.dropna(subset=["Рейтинг"])
+
+    answers = _parse_sheet(NPS_SPREADSHEET_ID, NPS_ANSWERS_SHEET)
+    school_col = _find_col(answers, ["По какой школе оставляешь обратную связь?"], "Школа")
+    counts = (
+        answers[school_col].value_counts()
+        .rename_axis("Школа")
+        .reset_index(name="Отзывов")
+    )
+
+    result = ratings.merge(counts, on="Школа", how="left")
+    result["Отзывов"] = result["Отзывов"].fillna(0).astype(int)
+    return result
+
+
+def get_school_rating(ratings: pd.DataFrame, school_name: str) -> dict | None:
+    """Return {"score": float, "count": int} for a school, or None if no data."""
+    row = ratings[ratings["Школа"] == school_name]
+    if len(row) == 0:
+        return None
+    return {
+        "score": float(row.iloc[0]["Рейтинг"]),
+        "count": int(row.iloc[0]["Отзывов"]),
+    }

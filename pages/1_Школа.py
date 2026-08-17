@@ -2,7 +2,10 @@ import streamlit as st
 import pandas as pd
 from html import escape
 from components.theme import inject_css, kpi_card, bar_row
-from data.loader import load_registry, load_minutka, load_fines, school_metrics
+from data.loader import (
+    load_registry, load_minutka, load_fines, school_metrics,
+    load_school_ratings, get_school_rating,
+)
 
 st.set_page_config(page_title="TERRA · Школа", page_icon="🏫", layout="wide")
 inject_css()
@@ -56,16 +59,40 @@ with st.sidebar:
 
 metrics = school_metrics(minutka_df, fines_df, selected_stream)
 
+# ─── Рейтинг школы (загружаем заранее — нужен и в заголовке, и в разделе ниже) ─
+show_rating_section = True
+ratings = load_school_ratings()
+rating = get_school_rating(ratings, selected_school)
+
 # ─── Заголовок ───────────────────────────────────────────────────────────────
-st.markdown(f"""
-<div class="terra-header">
-  <div class="terra-ring"></div>
-  <div>
-    <div style="font-size:1.2rem;font-weight:700;color:#1e293b">{escape(selected_school)}</div>
-    <div style="font-size:0.65rem;color:#2563eb;letter-spacing:2px;text-transform:uppercase">
-        Кластер: {escape(str(cluster))} · Поток {selected_stream}
+header_rating_html = ""
+if rating:
+    hr_color = "#22c55e" if rating["score"] >= 9 else "#f97316" if rating["score"] >= 7 else "#ef4444"
+    hr_pct = min(100, max(0, rating["score"] / 10 * 100))
+    header_rating_html = f"""
+  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0">
+    <div style="font-size:0.55rem;color:#94a3b8;text-transform:uppercase;letter-spacing:1px">Рейтинг</div>
+    <div style="position:relative;width:60px;height:60px;flex-shrink:0">
+      <div style="width:60px;height:60px;border-radius:50%;background:conic-gradient({hr_color} 0% {hr_pct:.1f}%, #e2e8f0 {hr_pct:.1f}% 100%)"></div>
+      <div style="position:absolute;inset:5px;border-radius:50%;background:#ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+        <span style="font-size:0.8rem;font-weight:800;color:{hr_color}">{rating['score']:.2f}</span>
+      </div>
     </div>
   </div>
+"""
+
+st.markdown(f"""
+<div class="terra-header" style="justify-content:space-between">
+  <div style="display:flex;align-items:center;gap:12px">
+    <div class="terra-ring"></div>
+    <div>
+      <div style="font-size:1.2rem;font-weight:700;color:#1e293b">{escape(selected_school)}</div>
+      <div style="font-size:0.65rem;color:#2563eb;letter-spacing:2px;text-transform:uppercase">
+          Кластер: {escape(str(cluster))} · Поток {selected_stream}
+      </div>
+    </div>
+  </div>
+  {header_rating_html}
 </div>
 """, unsafe_allow_html=True)
 
@@ -191,3 +218,37 @@ if len(ml) > 0:
     st.markdown(bars_html, unsafe_allow_html=True)
 else:
     st.info("Нет данных")
+
+# ─── Рейтинг школы (NPS) ──────────────────────────────────────────────────────
+if show_rating_section:
+    st.divider()
+    st.markdown("#### ⭐ Рейтинг школы")
+
+    if rating:
+        score = rating["score"]
+        count = rating["count"]
+        gauge_pct = min(100, max(0, score / 10 * 100))
+        gauge_color = "#22c55e" if score >= 9 else "#f97316" if score >= 7 else "#ef4444"
+        verdict = "Отлично" if score >= 9 else "Хорошо" if score >= 7 else "Требует внимания"
+        rating_html = f"""
+<div style="display:flex;align-items:center;gap:28px;padding:8px 0">
+  <div style="position:relative;width:140px;height:140px;flex-shrink:0">
+    <div style="width:140px;height:140px;border-radius:50%;background:conic-gradient({gauge_color} 0% {gauge_pct:.1f}%, #e2e8f0 {gauge_pct:.1f}% 100%)"></div>
+    <div style="position:absolute;inset:12px;border-radius:50%;background:#ffffff;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+      <span style="font-size:1.9rem;font-weight:800;color:{gauge_color};line-height:1">{score:.2f}</span>
+    </div>
+  </div>
+  <div>
+    <div style="font-size:1.05rem;font-weight:700;color:{gauge_color}">{verdict}</div>
+    <div style="font-size:0.7rem;color:#94a3b8;margin-top:4px">
+        Средняя оценка удовлетворённости учеников
+    </div>
+    <div style="font-size:0.7rem;color:#64748b;margin-top:10px">
+        На основе <b>{count}</b> оценок
+    </div>
+  </div>
+</div>
+"""
+        st.markdown(rating_html, unsafe_allow_html=True)
+    else:
+        st.info("Пока нет отзывов по этой школе")
