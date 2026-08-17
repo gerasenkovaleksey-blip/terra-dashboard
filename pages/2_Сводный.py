@@ -2,7 +2,10 @@ import streamlit as st
 import pandas as pd
 from html import escape
 import streamlit.components.v1 as components
-from components.theme import inject_css, bar_row, cluster_color, DEFAULT_ACCENT
+from components.theme import (
+    inject_css, bar_row, cluster_color, DEFAULT_ACCENT,
+    rating_color, rating_verdict, rating_bar_class, RATING_EXCELLENT,
+)
 from components.bento import bento_header_html
 from data.loader import (
     load_registry, load_minutka, load_all_schools_summary, load_all_fines_detail,
@@ -137,10 +140,10 @@ kpis = [
 # об этом уже сообщает плитка рейтинга в шапке.
 if avg_rating is not None:
     kpis.append({"label": "Средний рейтинг", "num": avg_rating, "icon": "⭐",
-                 "color": "#22c55e", "dec": 2, "series": []})
+                 "color": rating_color(avg_rating), "dec": 2, "series": []})
 
 rated_count = int(summary["Рейтинг"].notna().sum())
-high_rated  = int((summary["Рейтинг"] >= 9).sum())
+high_rated  = int((summary["Рейтинг"] >= RATING_EXCELLENT).sum())
 trend_note = (
     f"Тренд на спарклайнах: потоки {hist_streams[0]}–{hist_streams[-1]}"
     if len(hist_streams) >= 2 else
@@ -153,8 +156,10 @@ components.html(
         subtitle=f"{cluster_label} · Поток {selected_stream}",
         kpis=kpis,
         avg_rating=avg_rating,
-        rating_note=(f"{high_rated} из {rated_count} школ с оценкой ≥ 9.0"
+        rating_note=(f"{high_rated} из {rated_count} школ с оценкой ≥ {RATING_EXCELLENT}"
                      if rated_count else "Нет оценок"),
+        rating_color=rating_color(avg_rating),
+        rating_verdict=rating_verdict(avg_rating),
         schools_note=f"{len(summary)} школ · поток {selected_stream}",
         trend_note=trend_note,
         # Когда выбран конкретный кластер — красим шапку в его фирменный цвет
@@ -212,9 +217,7 @@ def _dropout_color(v) -> str:
 
 
 def _rating_color(v) -> str:
-    if pd.isna(v):
-        return "#94a3b8"
-    return "#22c55e" if v >= 9 else "#f97316" if v >= 7 else "#ef4444"
+    return rating_color(None if pd.isna(v) else v)
 
 
 _tbody = ""
@@ -384,7 +387,7 @@ with st.container(border=True):
         for i, (_, row) in enumerate(rated.iterrows()):
             col = cols_r[0] if i < half_r else cols_r[1]
             r_val = row["Рейтинг"]
-            color = "green" if r_val >= 9 else "orange" if r_val >= 7 else "red"
+            color = rating_bar_class(r_val)
             with col:
                 st.markdown(
                     bar_row(row["Школа"], r_val, 10, f"{r_val:.2f}", color),

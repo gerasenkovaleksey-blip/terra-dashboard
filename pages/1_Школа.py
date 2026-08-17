@@ -2,7 +2,9 @@ import streamlit as st
 import pandas as pd
 from html import escape
 import streamlit.components.v1 as components
-from components.theme import inject_css, bar_row, cluster_color
+from components.theme import (
+    inject_css, bar_row, cluster_color, rating_color, rating_verdict,
+)
 from components.bento import bento_header_html
 from data.loader import (
     load_registry, load_minutka, load_fines, school_metrics,
@@ -118,6 +120,8 @@ components.html(
         accent=accent,
         pill={"text": str(cluster), "color": accent} if cluster != "—" else None,
         leader={"name": leader_name, "url": leader_tg} if leader_name else None,
+        rating_color=rating_color(rating["score"]) if rating else None,
+        rating_verdict=rating_verdict(rating["score"]) if rating else None,
     ),
     height=290,
     # У iframe высота фиксированная: на узком экране KPI переносятся на второй
@@ -235,8 +239,8 @@ with st.container(border=True):
         score = rating["score"]
         count = rating["count"]
         gauge_pct = min(100, max(0, score / 10 * 100))
-        gauge_color = "#22c55e" if score >= 9 else "#f97316" if score >= 7 else "#ef4444"
-        verdict = "Отлично" if score >= 9 else "Хорошо" if score >= 7 else "Требует внимания"
+        gauge_color = rating_color(score)
+        verdict = rating_verdict(score)
         st.markdown(f"""
 <div style="display:flex;align-items:center;gap:28px;padding:8px 0">
   <div class="gauge" style="width:140px;height:140px;background:conic-gradient({gauge_color} 0% {gauge_pct:.1f}%, #e2e8f0 {gauge_pct:.1f}% 100%)">

@@ -19,6 +19,47 @@ _CLUSTER_FALLBACK = ["#0284c7", "#e11d48", "#ca8a04", "#7c3aed", "#0d9488"]
 
 DEFAULT_ACCENT = "#2563eb"
 
+# ─── Пороги рейтинга школы (средний балл 0–10) ────────────────────────────────
+# Подобраны под реальный разброс: из 1068 ответов 852 — «десятки», поэтому
+# средние сжаты в диапазон 8.5–10.0. Стандартные NPS-пороги (9 и 7) красили
+# зелёным 90% школ и не различали их между собой.
+RATING_EXCELLENT = 9.6      # и выше — «Отлично»
+RATING_GOOD      = 9.2      # 9.2–9.59 — «Хорошо», ниже — «Требует внимания»
+
+_RATING_NA_COLOR = "#94a3b8"
+
+
+def _is_na(value) -> bool:
+    """True для None и NaN — без импорта pandas в тему."""
+    return value is None or value != value
+
+
+def rating_color(score) -> str:
+    """Цвет рейтинга школы по порогам выше."""
+    if _is_na(score):
+        return _RATING_NA_COLOR
+    if score >= RATING_EXCELLENT:
+        return "#22c55e"
+    return "#f97316" if score >= RATING_GOOD else "#ef4444"
+
+
+def rating_verdict(score) -> str:
+    """Словесная оценка рейтинга."""
+    if _is_na(score):
+        return "Нет данных"
+    if score >= RATING_EXCELLENT:
+        return "Отлично"
+    return "Хорошо" if score >= RATING_GOOD else "Требует внимания"
+
+
+def rating_bar_class(score) -> str:
+    """Класс цвета для bar_row(): green / orange / red."""
+    if _is_na(score):
+        return "blue"
+    if score >= RATING_EXCELLENT:
+        return "green"
+    return "orange" if score >= RATING_GOOD else "red"
+
 
 def cluster_color(name) -> str:
     """

@@ -103,6 +103,8 @@ def bento_header_html(
     pill: dict | None = None,
     rating_label: str = "Средний рейтинг",
     leader: dict | None = None,
+    rating_color: str | None = None,
+    rating_verdict: str | None = None,
 ) -> str:
     """
     Полный HTML-документ для components.html: шапка (3 плитки) + ряд KPI.
@@ -133,7 +135,13 @@ def bento_header_html(
         leader_html = f'<div class="hm-leader">Руководитель: {l_body}</div>'
 
     if avg_rating is not None:
-        r_color = "#22c55e" if avg_rating >= 9 else "#f97316" if avg_rating >= 7 else "#ef4444"
+        # Цвет и вердикт задаёт вызывающая страница — пороги рейтинга школы живут
+        # в theme.py. Значения по умолчанию нужны для нерейтинговых шкал
+        # (например, точности заполнения на странице контроля).
+        r_color = rating_color or (
+            "#22c55e" if avg_rating >= 9 else "#f97316" if avg_rating >= 7 else "#ef4444")
+        r_verdict = rating_verdict or (
+            "Отлично" if avg_rating >= 9 else "Хорошо" if avg_rating >= 7 else "Требует внимания")
         r_pct = max(0.0, min(100.0, avg_rating / 10 * 100))
         # окружность r=30 → 2πr ≈ 188.5
         dash = 188.5
@@ -151,9 +159,7 @@ def bento_header_html(
             <div class="ring-num" style="color:{r_color}">{avg_rating:.2f}</div>
           </div>
           <div class="hr-txt">
-            <div class="hr-verdict" style="color:{r_color}">
-                {"Отлично" if avg_rating >= 9 else "Хорошо" if avg_rating >= 7 else "Требует внимания"}
-            </div>
+            <div class="hr-verdict" style="color:{r_color}">{escape(r_verdict)}</div>
             <div class="hr-note">{escape(rating_note)}</div>
           </div>
         </div>
