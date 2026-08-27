@@ -18,6 +18,7 @@ COL_CLUSTER = "Кластер"
 COL_URL     = "Ссылка на таблицу с подробным описанием школы"
 COL_LEADER  = "Полное ФИО"
 COL_TG      = "Ссылка на профиль"
+COL_TAKES   = "Поток берет?"
 
 # ─── Переопределения sheet_id ─────────────────────────────────────────────────
 # Если ссылка на таблицу школы изменилась, указываем новый sheet_id здесь.
@@ -115,7 +116,8 @@ def load_registry() -> pd.DataFrame:
     )
     # Руководитель школы и ссылка на его телеграм.
     # В таблице встречаются лишние пробелы по краям — чистим сразу.
-    for src, dst in ((COL_LEADER, "Руководитель"), (COL_TG, "Телеграм")):
+    for src, dst in ((COL_LEADER, "Руководитель"), (COL_TG, "Телеграм"),
+                     (COL_TAKES, "Берёт поток")):
         if src in df.columns:
             df[dst] = df[src].apply(lambda v: str(v).strip() if pd.notna(v) else "")
         else:
@@ -123,7 +125,7 @@ def load_registry() -> pd.DataFrame:
             df[dst] = ""
 
     result = df[[COL_SCHOOL, COL_CLUSTER, COL_URL,
-                 "Руководитель", "Телеграм", "sheet_id"]].reset_index(drop=True)
+                 "Руководитель", "Телеграм", "Берёт поток", "sheet_id"]].reset_index(drop=True)
     return result.rename(columns={COL_SCHOOL: "Школа"})
 
 # ─── МИНУТКА_ДАРОВАНИЯ ───────────────────────────────────────────────────────
@@ -564,11 +566,16 @@ def load_lessons(sheet_id: str) -> pd.DataFrame:
     а для контроля заполнения именно они и нужны — это занятия, по которым
     отчётность не внесли.
 
-    Returns DataFrame: Поток, Занятие, Дата, Учеников, Записано_форм.
+    Returns DataFrame: Поток, Занятие, Дата, Учеников, Записано_форм, Процент_в_таблице.
+
+    «Процент_в_таблице» — то, что школа написала своей рукой, приведённое к шкале
+    0–100. Дашборд его не использует (процент считается из количеств), он нужен
+    только вкладке «Качество данных», чтобы показать расхождение школе.
     """
+    _COLS = ["Поток", "Занятие", "Дата", "Учеников", "Записано_форм", "Процент_в_таблице"]
     df = _parse_sheet(sheet_id, "МИНУТКА_ДАРОВАНИЯ")
     if len(df) == 0 or "Дата" not in df.columns:
-        return pd.DataFrame(columns=["Поток", "Занятие", "Дата", "Учеников", "Записано_форм"])
+        return pd.DataFrame(columns=_COLS)
 
     raw = df["Дата"]
     if isinstance(raw, pd.DataFrame):      # в отдельных таблицах колонка задвоена
@@ -579,14 +586,27 @@ def load_lessons(sheet_id: str) -> pd.DataFrame:
     stream_col   = _find_col(df, _STREAM_COL_ALIASES, "Поток")
     students_col = _find_col(df, _STUDENTS_COL_ALIASES, "Количество учеников в школе")
     forms_col    = _find_col(df, _FORMS_COL_ALIASES, "Количество сданных форм")
+    pct_col      = _find_col(df, _PCT_COL_ALIASES, "Процент выполнения")
+
+    # Доли приводим к процентам поэлементно, а не по всей колонке: у части школ
+    # доли (1.0) и проценты (99) намешаны в одном столбце, и решение по максимуму
+    # колонки оставляло доли неотмасштабированными.
+    # Порог 3.0, а не 1.0, потому что при перевыполнении доля больше единицы
+    # (22 формы на 21 ученика = 1.05). Значение ≤3 трактуем как долю: настоящее
+    # выполнение в 1–3% означало бы пару сданных форм на сотню учеников, чего в
+    # данных не встречается, а вот доли встречаются постоянно.
+    pct_written = _to_numeric_clean(df[pct_col]).map(
+        lambda x: x * 100 if pd.notna(x) and x <= 3.0 else x
+    )
 
     out = pd.DataFrame({
-        "Поток":         pd.to_numeric(df[stream_col], errors="coerce"),
-        "Занятие":       pd.to_numeric(df[lesson_col], errors="coerce"),
+        "Поток":             pd.to_numeric(df[stream_col], errors="coerce"),
+        "Занятие":           pd.to_numeric(df[lesson_col], errors="coerce"),
         # .map, а не .dt.date: dtype колонки различается от таблицы к таблице
-        "Дата":          parsed.map(lambda x: x.date() if pd.notna(x) else None),
-        "Учеников":      _to_numeric_clean(df[students_col]),
-        "Записано_форм": _to_numeric_clean(df[forms_col]),
+        "Дата":              parsed.map(lambda x: x.date() if pd.notna(x) else None),
+        "Учеников":          _to_numeric_clean(df[students_col]),
+        "Записано_форм":     _to_numeric_clean(df[forms_col]),
+        "Процент_в_таблице": pct_written.round(2),
     })
     return out[out["Дата"].notna()].reset_index(drop=True)
 
@@ -711,6 +731,97 @@ def build_control_report() -> dict:
         "no_dates": pd.DataFrame(no_dates_rows),
         "late": pd.DataFrame(late_rows),
         "period": (lo, hi),
+    }
+
+
+@st.cache_data(ttl=3600)
+def build_quality_report(stream: int) -> dict:
+    """
+    Проверки качества данных: где таблица школы противоречит сама себе.
+
+    Ничего не исправляет — только показывает, чтобы школа поправила у себя.
+    Переиспользует load_lessons(), которую уже прогрел build_control_report(),
+    поэтому второй загрузки таблиц не происходит.
+
+    Returns dict со списками находок (см. ключи ниже).
+    """
+    registry = load_registry()
+    answers = load_nps_answers()
+
+    pct_bad, forms_over, half, date_bad, no_rows, broken = [], [], [], [], [], []
+
+    for _, school in registry.iterrows():
+        name = str(school["Школа"]).strip()
+        sid = school["sheet_id"]
+        takes = str(school.get("Берёт поток") or "").strip()
+
+        if pd.isna(sid) or str(sid).strip() in ("", "nan", "None"):
+            broken.append({"Школа": name, "Причина": "нет ссылки на таблицу"})
+            continue
+        try:
+            lessons = load_lessons(sid)
+        except Exception as e:
+            broken.append({"Школа": name, "Причина": str(e)[:70]})
+            continue
+
+        for _, r in lessons.iterrows():
+            s, f, p = r["Учеников"], r["Записано_форм"], r["Процент_в_таблице"]
+            both = pd.notna(s) and pd.notna(f)
+
+            if pd.notna(s) != pd.notna(f):
+                half.append({"Школа": name, "Поток": r["Поток"], "Занятие": r["Занятие"],
+                             "Дата": r["Дата"],
+                             "Чего нет": "форм" if pd.isna(f) else "учеников"})
+                continue
+            if not both or s <= 0:
+                continue
+            if f > s:
+                forms_over.append({"Школа": name, "Поток": r["Поток"], "Занятие": r["Занятие"],
+                                   "Учеников": int(s), "Форм": int(f),
+                                   "Процент": round(f / s * 100, 1)})
+            if pd.notna(p):
+                calc = f / s * 100
+                if abs(p - calc) > 0.5:
+                    pct_bad.append({"Школа": name, "Поток": r["Поток"], "Занятие": r["Занятие"],
+                                    "Учеников": int(s), "Форм": int(f),
+                                    "В таблице": round(float(p), 1), "По факту": round(calc, 1),
+                                    "Дельта": round(calc - float(p), 1)})
+
+        cur = lessons[lessons["Поток"] == stream]
+        if len(cur) == 0:
+            if takes == str(stream):
+                no_rows.append({"Школа": name, "Кластер": school.get("Кластер"),
+                                "Строк потока": 0})
+            continue
+
+        dates = sorted(d for d in cur["Дата"].tolist() if d is not None)
+        dups = [d for d, c in pd.Series(dates).value_counts().items() if c > 1]
+        # Занятия еженедельные: любой другой разрыв — повод посмотреть
+        gaps = [(a, b, (b - a).days) for a, b in zip(dates, dates[1:]) if (b - a).days != 7]
+        if dups or gaps:
+            date_bad.append({
+                "Школа": name,
+                # С годом: среди дат попадаются явно битые (1969-й), и без года
+                # разрыв «01.01→04.08» выглядит опечаткой в самой проверке
+                "Задвоено": ", ".join(f"{d:%d.%m.%y}" for d in dups),
+                "Разрывы": "; ".join(f"{a:%d.%m.%y}→{b:%d.%m.%y} ({n} дн.)"
+                                     for a, b, n in gaps[:3]),
+            })
+
+    # Имя школы в форме НПС должно совпадать с реестром: разойдётся хоть на пробел —
+    # и все её оценки молча выпадут из дашборда
+    reg_names = set(registry["Школа"].astype(str).str.strip())
+    ghosts = [{"Название в форме": g, "Ответов": int((answers["Школа"] == g).sum())}
+              for g in sorted(set(answers["Школа"]) - reg_names)]
+
+    return {
+        "pct_bad": pd.DataFrame(pct_bad),
+        "forms_over": pd.DataFrame(forms_over),
+        "half": pd.DataFrame(half),
+        "date_bad": pd.DataFrame(date_bad),
+        "no_rows": pd.DataFrame(no_rows),
+        "broken": pd.DataFrame(broken),
+        "ghosts": pd.DataFrame(ghosts),
     }
 
 
