@@ -904,6 +904,20 @@ SMALL_SCHOOL_COEF     = 0.9
 LARGE_SCHOOL_COEF     = 1.0
 
 
+def school_size(start, finish):
+    """
+    Размер школы для коэффициента — среднее между стартом и финишем потока.
+
+    Ни то, ни другое по отдельности не подходит: старт завышает школу, из которой
+    почти все ушли, а финиш занижает большую школу с сильным отсевом.
+    Если известно только одно из чисел, берём его.
+    """
+    values = [v for v in (start, finish) if v is not None and pd.notna(v)]
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
 def rating_coefficient(students) -> float:
     """Понижающий коэффициент рейтинга по числу учеников."""
     if students is None or pd.isna(students):

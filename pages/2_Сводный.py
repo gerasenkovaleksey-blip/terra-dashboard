@@ -11,7 +11,7 @@ from components.criteria import criteria_html, scorecard_summary_html
 from data.loader import (
     load_registry, load_minutka, load_all_schools_summary, load_all_fines_detail,
     load_school_ratings, load_streams_history, load_scorecard,
-    rating_coefficient, adjusted_rating,
+    rating_coefficient, adjusted_rating, school_size,
 )
 
 st.set_page_config(page_title="TERRA · Сводный", page_icon="📊", layout="wide")
@@ -66,11 +66,12 @@ if selected_school_filter != "Все школы":
 ratings = load_school_ratings()
 summary = summary.merge(ratings[["Школа", "Рейтинг", "Отзывов"]], on="Школа", how="left")
 
-# Корректировка рейтинга на размер школы: за размер берём старт потока —
-# это и есть «сколько учеников в школе», а не сколько осталось к финалу.
-summary["Коэф."] = summary["Старт"].map(rating_coefficient)
+# Корректировка рейтинга на размер школы. За размер берём среднее между
+# стартом и финишем потока — см. school_size().
+summary["Размер"] = [school_size(a, b) for a, b in zip(summary["Старт"], summary["Финиш"])]
+summary["Коэф."] = summary["Размер"].map(rating_coefficient)
 summary["Рейтинг с корр."] = [
-    adjusted_rating(r, n) for r, n in zip(summary["Рейтинг"], summary["Старт"])
+    adjusted_rating(r, n) for r, n in zip(summary["Рейтинг"], summary["Размер"])
 ]
 
 cluster_label = selected_cluster if selected_cluster != "Все кластеры" else "Все кластеры"
