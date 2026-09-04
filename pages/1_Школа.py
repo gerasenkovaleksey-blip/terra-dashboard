@@ -6,6 +6,7 @@ from components.theme import (
     inject_css, bar_row, cluster_color, rating_color, rating_verdict,
 )
 from components.bento import bento_header_html
+from components.criteria import criteria_html
 from data.loader import (
     load_registry, load_minutka, load_fines, school_metrics,
     load_school_ratings, get_school_rating,
@@ -261,3 +262,9 @@ with st.container(border=True):
 """, unsafe_allow_html=True)
     else:
         st.info("Пока нет отзывов по этой школе")
+
+# ─── Критерии лучшей школы потока ────────────────────────────────────────────
+with st.container(border=True):
+    st.markdown('<div class="sec-title">🏆 Что учитывается при выборе лучшей школы потока</div>',
+                unsafe_allow_html=True)
+    st.markdown(criteria_html(), unsafe_allow_html=True)

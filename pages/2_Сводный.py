@@ -7,6 +7,7 @@ from components.theme import (
     rating_color, rating_verdict, rating_bar_class, RATING_EXCELLENT,
 )
 from components.bento import bento_header_html
+from components.criteria import criteria_html
 from data.loader import (
     load_registry, load_minutka, load_all_schools_summary, load_all_fines_detail,
     load_school_ratings, load_streams_history,
@@ -449,3 +450,9 @@ if len(fines_detail) > 0:
         st.success("Штрафов нет")
 else:
     st.success("Штрафов нет")
+
+# ─── Критерии лучшей школы потока ────────────────────────────────────────────
+with st.container(border=True):
+    st.markdown('<div class="sec-title">🏆 Что учитывается при выборе лучшей школы потока</div>',
+                unsafe_allow_html=True)
+    st.markdown(criteria_html(), unsafe_allow_html=True)
