@@ -7,7 +7,11 @@ from components.auth import require_password
 from components.bento import bento_header_html
 from data.loader import (
     build_control_report, build_quality_report, load_registry, NPS_WINDOW_DAYS,
+    load_all_schools_summary, load_school_ratings, load_scorecard,
+    school_size, rating_coefficient, adjusted_rating,
+    RATING_SIZE_THRESHOLD, SMALL_SCHOOL_COEF,
 )
+from components.criteria import criteria_html
 
 
 def registry_takes() -> int:
@@ -107,7 +111,9 @@ st.caption(
 _takes = registry_takes()
 current_stream = _takes if _takes else 0
 
-tab_lessons, tab_quality = st.tabs(["📋 Сверка занятий", "🧪 Качество данных"])
+tab_lessons, tab_quality, tab_rating = st.tabs(
+    ["📋 Сверка занятий", "🧪 Качество данных", "⭐ Рейтинг с корректировкой"]
+)
 
 # ─── Вкладка 1: сверка занятий ───────────────────────────────────────────────
 with tab_lessons:
@@ -347,3 +353,69 @@ with tab_quality:
         "выпадают из дашборда. Название в форме нужно привести к реестру.",
         ["Название в форме", "Ответов"],
     )
+
+# ─── Вкладка 3: рейтинг с корректировкой ─────────────────────────────────────
+# Коэффициент — внутренняя информация, поэтому живёт только здесь, под паролем.
+# На публичных страницах школы видят рейтинг без поправки.
+with tab_rating:
+    st.markdown(
+        f'<div style="font-size:1.05rem;font-weight:700;color:#1e293b">'
+        f'Рейтинг с поправкой на размер школы</div>'
+        f'<div style="font-size:0.72rem;color:#64748b;margin:4px 0 12px">'
+        f'Школы меньше {RATING_SIZE_THRESHOLD} человек получают коэффициент '
+        f'{SMALL_SCHOOL_COEF}. Размер — среднее между стартом и финишем потока. '
+        f'Школам этот раздел не виден.</div>',
+        unsafe_allow_html=True,
+    )
+
+    with st.spinner("Считаем рейтинг..."):
+        board = load_all_schools_summary(current_stream)
+        board = board.merge(load_school_ratings()[["Школа", "Рейтинг", "Отзывов"]],
+                            on="Школа", how="left")
+
+    if len(board) == 0:
+        st.warning(f"Нет данных за поток {current_stream}")
+    else:
+        board["Размер"] = [school_size(a, b)
+                           for a, b in zip(board["Старт"], board["Финиш"])]
+        board["Коэф."] = board["Размер"].map(rating_coefficient)
+        board["С корр."] = [adjusted_rating(r, n)
+                            for r, n in zip(board["Рейтинг"], board["Размер"])]
+        board = board.sort_values("С корр.", ascending=False, na_position="last")
+
+        small = int((board["Коэф."] == SMALL_SCHOOL_COEF).sum())
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Школ в потоке", len(board))
+        c2.metric("Под коэффициентом", small)
+        c3.metric("Лидер", board.iloc[0]["Школа"][:22] if len(board) else "—",
+                  f"{board.iloc[0]['С корр.']:.2f}" if pd.notna(board.iloc[0]["С корр."]) else "—")
+
+        st.dataframe(
+            board[["Школа", "Старт", "Финиш", "Размер", "Отзывов",
+                   "Рейтинг", "Коэф.", "С корр."]],
+            use_container_width=True, hide_index=True,
+        )
+        st.caption(
+            "«Рейтинг» — средняя оценка НПС без поправки, она же видна школам. "
+            "«С корр.» — с учётом размера, по ней и сравниваем."
+        )
+
+    st.divider()
+    st.markdown('<div class="sec-title">🏆 Критерии лучшей школы потока</div>',
+                unsafe_allow_html=True)
+    try:
+        card = load_scorecard()
+    except Exception as e:
+        card = {"data": pd.DataFrame(), "criteria": [], "filled": False}
+        st.caption(f"Чек-лист недоступен: {e}")
+
+    if card["filled"] and len(card["data"]):
+        cols_show = ["Школа", "Отмечено"] + (["Итог"] if "Итог" in card["data"].columns else [])
+        st.dataframe(
+            card["data"].sort_values("Отмечено", ascending=False)[cols_show],
+            use_container_width=True, hide_index=True,
+        )
+        st.caption("«Итог» берётся из таблицы руководителя кластера и не пересчитывается.")
+    else:
+        st.markdown(criteria_html(card["criteria"] or None), unsafe_allow_html=True)
+        st.caption("Руководитель кластера ещё не проставил галочки по этому потоку.")
