@@ -11,6 +11,7 @@ from components.criteria import criteria_html, scorecard_summary_html
 from data.loader import (
     load_registry, load_minutka, load_all_schools_summary, load_all_fines_detail,
     load_school_ratings, load_streams_history, load_scorecard,
+    rating_coefficient, adjusted_rating,
 )
 
 st.set_page_config(page_title="TERRA · Сводный", page_icon="📊", layout="wide")
@@ -64,6 +65,13 @@ if selected_school_filter != "Все школы":
 # Рейтинг школ (0-10) — общий по всем потокам, не привязан к выбранному потоку
 ratings = load_school_ratings()
 summary = summary.merge(ratings[["Школа", "Рейтинг", "Отзывов"]], on="Школа", how="left")
+
+# Корректировка рейтинга на размер школы: за размер берём старт потока —
+# это и есть «сколько учеников в школе», а не сколько осталось к финалу.
+summary["Коэф."] = summary["Старт"].map(rating_coefficient)
+summary["Рейтинг с корр."] = [
+    adjusted_rating(r, n) for r, n in zip(summary["Рейтинг"], summary["Старт"])
+]
 
 cluster_label = selected_cluster if selected_cluster != "Все кластеры" else "Все кластеры"
 
@@ -198,9 +206,9 @@ _TF = ("padding:8px 12px;font-size:13px;font-weight:700;color:#1e293b;"
        "border-top:2px solid #2563eb;z-index:2;white-space:nowrap")
 
 _heads = ["Школа","Кластер","Старт","Финиш","Отсев %","Назначено ₽",
-          "Штрафы ₽","На 1 уч. (старт)","На 1 уч. (финиш)","Минутка %","Рейтинг"]
+          "Штрафы ₽","На 1 уч. (старт)","На 1 уч. (финиш)","Минутка %","Рейтинг","Коэф.","С корр."]
 _cols  = ["Школа","Кластер","Старт","Финиш","Отсев %","Штрафов назначено ₽",
-          "Штрафы ₽","На 1 ученика (старт)","На 1 ученика (финиш)","Минутка %","Рейтинг"]
+          "Штрафы ₽","На 1 ученика (старт)","На 1 ученика (финиш)","Минутка %","Рейтинг","Коэф.","Рейтинг с корр."]
 _rub   = {"Штрафы ₽","Штрафов назначено ₽","На 1 ученика (старт)","На 1 ученика (финиш)"}
 
 def _r(x): return f"{int(x):,}₽".replace(",", " ")
@@ -242,6 +250,11 @@ for _i, (_, _row) in enumerate(summary.iterrows()):
         elif _c == "Минутка %":
             _v = f"{_v}%"
         elif _c == "Рейтинг":
+            _v = f"{_v:.2f}" if pd.notna(_v) else "—"
+        elif _c == "Коэф.":
+            _extra = "color:#94a3b8" if _v == 1.0 else "color:#f97316;font-weight:700"
+            _v = f"{_v:.1f}"
+        elif _c == "Рейтинг с корр.":
             _extra = f"color:{_rating_color(_v)};font-weight:700"
             _v = f"{_v:.2f}" if pd.notna(_v) else "—"
         else:
@@ -257,6 +270,9 @@ _fvals = [
     _r(avg_per_start), _r(avg_per_finish),
     f"{avg_minutka_val}%",
     f"{avg_rating_val:.2f}" if avg_rating_val is not None else "—",
+    "", 
+    f"{summary['Рейтинг с корр.'].mean():.2f}"
+    if summary["Рейтинг с корр."].notna().any() else "—",
 ]
 _tfoot = "".join(f'<td style="{_TF}">{escape(v)}</td>' for v in _fvals)
 

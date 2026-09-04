@@ -10,6 +10,7 @@ from components.criteria import criteria_html, scorecard_summary_html
 from data.loader import (
     load_registry, load_minutka, load_fines, school_metrics,
     load_school_ratings, get_school_rating, load_scorecard,
+    rating_coefficient, adjusted_rating,
 )
 
 st.set_page_config(page_title="TERRA · Школа", page_icon="🏫", layout="wide")
@@ -242,6 +243,9 @@ with st.container(border=True):
         gauge_pct = min(100, max(0, score / 10 * 100))
         gauge_color = rating_color(score)
         verdict = rating_verdict(score)
+        students = metrics["first_lesson_students"]
+        coef = rating_coefficient(students)
+        adj = adjusted_rating(score, students)
         st.markdown(f"""
 <div style="display:flex;align-items:center;gap:28px;padding:8px 0">
   <div class="gauge" style="width:140px;height:140px;background:conic-gradient({gauge_color} 0% {gauge_pct:.1f}%, #e2e8f0 {gauge_pct:.1f}% 100%)">
@@ -256,6 +260,10 @@ with st.container(border=True):
     </div>
     <div style="font-size:0.7rem;color:#64748b;margin-top:10px">
         На основе <b>{count}</b> оценок
+    </div>
+    <div style="font-size:0.7rem;color:#64748b;margin-top:8px">
+        С поправкой на размер школы (×{coef:.1f}):
+        <b style="color:{gauge_color}">{adj:.2f}</b>
     </div>
   </div>
 </div>

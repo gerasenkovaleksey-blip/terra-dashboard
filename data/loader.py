@@ -895,6 +895,29 @@ def _has_nearby_answers(school_answers: pd.DataFrame, lesson_date) -> bool:
     return bool(school_answers["Дата"].map(lambda d: lo <= d <= hi).any())
 
 
+# ─── Корректировка рейтинга по размеру школы ─────────────────────────────────
+# Маленькой школе легче держать высокий рейтинг, поэтому её оценка умножается
+# на понижающий коэффициент: менее 15 учеников — 0.9, от 15 и выше — без правки.
+# Сравнение строгое: ровно 15 учеников коэффициента уже не получает.
+RATING_SIZE_THRESHOLD = 15
+SMALL_SCHOOL_COEF     = 0.9
+LARGE_SCHOOL_COEF     = 1.0
+
+
+def rating_coefficient(students) -> float:
+    """Понижающий коэффициент рейтинга по числу учеников."""
+    if students is None or pd.isna(students):
+        return LARGE_SCHOOL_COEF
+    return SMALL_SCHOOL_COEF if students < RATING_SIZE_THRESHOLD else LARGE_SCHOOL_COEF
+
+
+def adjusted_rating(score, students):
+    """Рейтинг с поправкой на размер школы. None, если оценки нет."""
+    if score is None or pd.isna(score):
+        return None
+    return round(float(score) * rating_coefficient(students), 2)
+
+
 def get_school_rating(ratings: pd.DataFrame, school_name: str) -> dict | None:
     """Return {"score": float, "count": int} for a school, or None if no data."""
     row = ratings[ratings["Школа"] == school_name]
