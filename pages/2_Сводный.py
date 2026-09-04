@@ -7,10 +7,10 @@ from components.theme import (
     rating_color, rating_verdict, rating_bar_class, RATING_EXCELLENT,
 )
 from components.bento import bento_header_html
-from components.criteria import criteria_html
+from components.criteria import criteria_html, scorecard_summary_html
 from data.loader import (
     load_registry, load_minutka, load_all_schools_summary, load_all_fines_detail,
-    load_school_ratings, load_streams_history,
+    load_school_ratings, load_streams_history, load_scorecard,
 )
 
 st.set_page_config(page_title="TERRA · Сводный", page_icon="📊", layout="wide")
@@ -453,6 +453,29 @@ else:
 
 # ─── Критерии лучшей школы потока ────────────────────────────────────────────
 with st.container(border=True):
-    st.markdown('<div class="sec-title">🏆 Что учитывается при выборе лучшей школы потока</div>',
+    st.markdown('<div class="sec-title">🏆 Критерии лучшей школы потока</div>',
                 unsafe_allow_html=True)
-    st.markdown(criteria_html(), unsafe_allow_html=True)
+    try:
+        card = load_scorecard()
+    except Exception as e:
+        card = {"data": pd.DataFrame(), "criteria": [], "filled": False}
+        st.caption(f"Чек-лист недоступен: {e}")
+
+    if card["filled"] and len(card["data"]):
+        board = card["data"].copy()
+        sort_col = "Итог" if "Итог" in board.columns and board["Итог"].notna().any() else "Отмечено"
+        board = board.sort_values(sort_col, ascending=False)
+        show = ["Школа", "Отмечено"] + (["Итог"] if "Итог" in board.columns else [])
+        st.dataframe(board[show], use_container_width=True, hide_index=True)
+        st.caption(
+            f"Всего критериев: {len(card['criteria'])}. «Итог» берётся из таблицы "
+            "руководителя кластера как есть и здесь не пересчитывается."
+        )
+        with st.expander("Показать список критериев"):
+            st.markdown(criteria_html(card["criteria"] or None), unsafe_allow_html=True)
+    else:
+        st.markdown(criteria_html(card["criteria"] or None), unsafe_allow_html=True)
+        st.caption(
+            "Галочки проставляет руководитель кластера в отдельной таблице. "
+            "По этому потоку она ещё не заполнена — рейтинг появится здесь автоматически."
+        )

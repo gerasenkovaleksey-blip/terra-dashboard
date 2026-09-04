@@ -6,10 +6,10 @@ from components.theme import (
     inject_css, bar_row, cluster_color, rating_color, rating_verdict,
 )
 from components.bento import bento_header_html
-from components.criteria import criteria_html
+from components.criteria import criteria_html, scorecard_summary_html
 from data.loader import (
     load_registry, load_minutka, load_fines, school_metrics,
-    load_school_ratings, get_school_rating,
+    load_school_ratings, get_school_rating, load_scorecard,
 )
 
 st.set_page_config(page_title="TERRA · Школа", page_icon="🏫", layout="wide")
@@ -265,6 +265,32 @@ with st.container(border=True):
 
 # ─── Критерии лучшей школы потока ────────────────────────────────────────────
 with st.container(border=True):
-    st.markdown('<div class="sec-title">🏆 Что учитывается при выборе лучшей школы потока</div>',
+    st.markdown('<div class="sec-title">🏆 Критерии лучшей школы потока</div>',
                 unsafe_allow_html=True)
-    st.markdown(criteria_html(), unsafe_allow_html=True)
+    try:
+        card = load_scorecard()
+    except Exception as e:
+        card = {"data": pd.DataFrame(), "criteria": [], "filled": False}
+        st.caption(f"Чек-лист недоступен: {e}")
+
+    crit = card["criteria"] or None
+    row = None
+    if len(card["data"]):
+        hit = card["data"][card["data"]["Школа"] == selected_school]
+        if len(hit):
+            row = hit.iloc[0]
+
+    if row is not None and card["filled"]:
+        marks = {c: bool(row[c]) for c in card["criteria"]}
+        st.markdown(
+            scorecard_summary_html(int(row["Отмечено"]), len(card["criteria"]),
+                                   row.get("Итог")),
+            unsafe_allow_html=True,
+        )
+        st.markdown(criteria_html(crit, marks), unsafe_allow_html=True)
+    else:
+        st.markdown(criteria_html(crit), unsafe_allow_html=True)
+        st.caption(
+            "Галочки проставляет руководитель кластера в отдельной таблице. "
+            "По этому потоку она ещё не заполнена — появится здесь автоматически."
+        )

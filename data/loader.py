@@ -734,6 +734,68 @@ def build_control_report() -> dict:
     }
 
 
+# ─── Чек-лист лучшей школы потока ─────────────────────────────────────────────
+# Таблицу заполняет руководитель кластера: галочки по критериям + итоговый балл.
+SCORECARD_ID    = "1qdVqhltdzHmQNctOUD05_aKfV8wW7AqrB1DbRt-VGXY"
+SCORECARD_SHEET = "Рейтинг"          # текущий поток
+SCORECARD_PREV  = "Рейтинг (копия)"  # предыдущий поток, уже заполненный
+
+_SCORE_NAME_COL = "Школа/Показатели"
+_SCORE_NPS_COL  = "Рейтинг по обратной связи"
+_SCORE_TOTAL    = "Итог"
+
+# «Школа ЗОЖ - 39 поток» → «Школа ЗОЖ»
+_STREAM_SUFFIX = re.compile(r"\s*[-–—]\s*\d+\s*поток\s*$", re.IGNORECASE)
+
+
+def _clean_school_name(value) -> str:
+    return _STREAM_SUFFIX.sub("", str(value).strip()).strip()
+
+
+@st.cache_data(ttl=3600)
+def load_scorecard(previous: bool = False) -> dict:
+    """
+    Чек-лист критериев лучшей школы потока.
+
+    Returns dict:
+      data     — DataFrame: Школа, Рейтинг ОС, <по колонке на критерий>, Итог, Отмечено
+      criteria — список названий критериев в порядке таблицы
+      filled   — True, если хоть одна галочка проставлена
+
+    ВАЖНО: «Итог» берётся из таблицы как есть и НЕ пересчитывается. Он не выводится
+    из видимых галочек (в потоке 39 школа с 9 отметками получила 11.24, а школа с
+    12 отметками — 10.18), то есть формула опирается на данные вне этой вкладки.
+    Пересчёт на нашей стороне давал бы другие числа и спорил бы с таблицей.
+    """
+    sheet = SCORECARD_PREV if previous else SCORECARD_SHEET
+    df = _parse_sheet(SCORECARD_ID, sheet)
+    if len(df) == 0 or _SCORE_NAME_COL not in df.columns:
+        logger.warning("Чек-лист: вкладка %s пуста или без колонки школы", sheet)
+        return {"data": pd.DataFrame(), "criteria": [], "filled": False}
+
+    cols = list(df.columns)
+    # Критерии — всё между колонкой рейтинга и итогом. Их состав меняется от
+    # потока к потоку, поэтому читаем из таблицы, а не держим список у себя.
+    start = cols.index(_SCORE_NPS_COL) + 1 if _SCORE_NPS_COL in cols else 1
+    end = cols.index(_SCORE_TOTAL) if _SCORE_TOTAL in cols else len(cols)
+    criteria = [c for c in cols[start:end] if not str(c).startswith("Unnamed")]
+
+    out = pd.DataFrame({"Школа": df[_SCORE_NAME_COL].map(_clean_school_name)})
+    out = out[out["Школа"].ne("") & out["Школа"].ne("nan")].copy()
+
+    if _SCORE_NPS_COL in cols:
+        out["Рейтинг ОС"] = pd.to_numeric(df[_SCORE_NPS_COL], errors="coerce")
+    for c in criteria:
+        # В XLSX галочки приходят как True/False, но у части строк — пустые ячейки
+        out[c] = df[c].map(lambda v: v is True or str(v).strip().lower() == "true")
+    if _SCORE_TOTAL in cols:
+        out["Итог"] = pd.to_numeric(df[_SCORE_TOTAL], errors="coerce")
+
+    out["Отмечено"] = out[criteria].sum(axis=1).astype(int) if criteria else 0
+    out = out.reset_index(drop=True)
+    return {"data": out, "criteria": criteria, "filled": bool(out["Отмечено"].sum())}
+
+
 @st.cache_data(ttl=3600)
 def build_quality_report(stream: int) -> dict:
     """
