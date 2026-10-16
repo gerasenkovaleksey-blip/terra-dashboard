@@ -9,7 +9,7 @@ from data.loader import (
     build_control_report, build_quality_report, load_registry, NPS_WINDOW_DAYS,
     load_all_schools_summary, load_school_ratings, load_scorecard,
     school_size, rating_coefficient, adjusted_rating,
-    RATING_SIZE_THRESHOLD, SMALL_SCHOOL_COEF,
+    RATING_SIZE_MIN, RATING_SIZE_MAX, SMALL_SCHOOL_COEF,
 )
 from components.criteria import criteria_html
 
@@ -370,8 +370,10 @@ with tab_rating:
         f'<div style="font-size:1.05rem;font-weight:700;color:#1e293b">'
         f'Рейтинг с поправкой на размер школы</div>'
         f'<div style="font-size:0.72rem;color:#64748b;margin:4px 0 12px">'
-        f'Школы меньше {RATING_SIZE_THRESHOLD} человек получают коэффициент '
-        f'{SMALL_SCHOOL_COEF}. Размер — среднее между стартом и финишем потока. '
+        f'Коэффициент {SMALL_SCHOOL_COEF:.2f} при {RATING_SIZE_MIN} учениках и меньше, '
+        f'1.00 при {RATING_SIZE_MAX} и больше, между ними — плавный рост по SQRT. '
+        f'Это поправка на надёжность выборки, а не оценка качества: размер влияет '
+        f'не более чем на 10%. Размер — среднее между стартом и финишем потока. '
         f'Школам этот раздел не виден.</div>',
         unsafe_allow_html=True,
     )

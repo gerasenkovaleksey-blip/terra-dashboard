@@ -1,5 +1,6 @@
 import re
 import io
+import math
 import logging
 import urllib.parse
 
@@ -904,12 +905,17 @@ def _has_nearby_answers(school_answers: pd.DataFrame, lesson_date) -> bool:
 
 
 # ─── Корректировка рейтинга по размеру школы ─────────────────────────────────
-# Маленькой школе легче держать высокий рейтинг, поэтому её оценка умножается
-# на понижающий коэффициент: менее 15 учеников — 0.9, от 15 и выше — без правки.
-# Сравнение строгое: ровно 15 учеников коэффициента уже не получает.
-RATING_SIZE_THRESHOLD = 15
-SMALL_SCHOOL_COEF     = 0.9
-LARGE_SCHOOL_COEF     = 1.0
+# Количество учеников — не оценка качества, а поправка на надёжность выборки:
+# чем больше участников, тем меньше шанс, что NPS случайно уехал из-за пары
+# отзывов. Влияние размера ограничено 10% (коэффициент 0.90–1.00), основным
+# показателем остаётся сам NPS.
+#
+# Рост нелинейный: первые дополнительные ученики заметно повышают надёжность,
+# дальше эффект затухает — отсюда квадратный корень, а не прямая.
+RATING_SIZE_MIN   = 15     # и меньше — минимальный коэффициент
+RATING_SIZE_MAX   = 60     # и больше — поправки нет
+SMALL_SCHOOL_COEF = 0.90
+LARGE_SCHOOL_COEF = 1.00
 
 
 def school_size(start, finish):
@@ -927,10 +933,23 @@ def school_size(start, finish):
 
 
 def rating_coefficient(students) -> float:
-    """Понижающий коэффициент рейтинга по числу учеников."""
+    """
+    Коэффициент размера школы: 0.90 при 15 учениках и меньше, 1.00 при 60 и
+    больше, между ними — плавный рост по квадратному корню.
+
+    Формула непрерывна в точке 15, поэтому трактовка порога — «до 15
+    включительно» или «меньше 15» — на результат не влияет: при ровно 15
+    обе дают 0.90. Скачка на переходе нет.
+
+    Размер неизвестен → 1.00: отсутствие данных не должно штрафовать школу.
+    """
     if students is None or pd.isna(students):
         return LARGE_SCHOOL_COEF
-    return SMALL_SCHOOL_COEF if students < RATING_SIZE_THRESHOLD else LARGE_SCHOOL_COEF
+    if students <= RATING_SIZE_MIN:
+        return SMALL_SCHOOL_COEF
+    capped = min(float(students), RATING_SIZE_MAX)
+    span = RATING_SIZE_MAX - RATING_SIZE_MIN
+    return SMALL_SCHOOL_COEF + 0.10 * math.sqrt((capped - RATING_SIZE_MIN) / span)
 
 
 def adjusted_rating(score, students):
