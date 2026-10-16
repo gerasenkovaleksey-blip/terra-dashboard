@@ -14,13 +14,21 @@ from data.loader import (
 from components.criteria import criteria_html
 
 
-def registry_takes() -> int:
+def registry_streams() -> list[int]:
     """
-    Активный поток по реестру — самое частое значение колонки «Поток берет?».
-    Дешевле, чем сканировать таблицы школ, и реестр здесь и есть источник истины.
+    Потоки из реестра, новые первыми. Дешевле, чем сканировать таблицы школ.
+
+    Реестр помечает школу новым потоком раньше, чем она заводит по нему строки,
+    поэтому самый свежий поток вполне может оказаться без единого занятия.
     """
     values = pd.to_numeric(load_registry()["Берёт поток"], errors="coerce").dropna()
-    return int(values.mode().iloc[0]) if len(values) else 0
+    return sorted({int(v) for v in values}, reverse=True)
+
+
+def registry_takes() -> int:
+    """Активный поток по реестру — самый свежий из проставленных."""
+    streams = registry_streams()
+    return streams[0] if streams else 0
 
 st.set_page_config(page_title="TERRA · Контроль", page_icon="🔒", layout="wide")
 inject_css()
@@ -368,14 +376,25 @@ with tab_rating:
         unsafe_allow_html=True,
     )
 
+    # Поток можно переключить: реестр уже помечает школы новым потоком, когда
+    # в их таблицах за него ещё ни одной строки.
+    rating_stream = st.selectbox(
+        "Поток", registry_streams(), index=0, key="rating_stream",
+    )
+
     with st.spinner("Считаем рейтинг..."):
-        board = load_all_schools_summary(current_stream)
+        board = load_all_schools_summary(rating_stream)
+
+    # Пустой результат приходит как DataFrame вообще без колонок, поэтому
+    # проверяем ДО merge — иначе merge(on="Школа") падает с KeyError.
+    if len(board) == 0:
+        st.warning(
+            f"За поток {rating_stream} в таблицах школ ещё нет ни одного занятия. "
+            "Выберите поток выше."
+        )
+    else:
         board = board.merge(load_school_ratings()[["Школа", "Рейтинг", "Отзывов"]],
                             on="Школа", how="left")
-
-    if len(board) == 0:
-        st.warning(f"Нет данных за поток {current_stream}")
-    else:
         board["Размер"] = [school_size(a, b)
                            for a, b in zip(board["Старт"], board["Финиш"])]
         board["Коэф."] = board["Размер"].map(rating_coefficient)
