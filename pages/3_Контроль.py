@@ -8,7 +8,8 @@ from components.bento import bento_header_html
 from data.loader import (
     build_control_report, build_quality_report, load_registry, NPS_WINDOW_DAYS,
     load_all_schools_summary, load_school_ratings, load_scorecard,
-    school_size, rating_coefficient, adjusted_rating,
+    school_size, rating_coefficient, adjusted_rating, final_rating,
+    CRITERION_BONUS,
     RATING_SIZE_MIN, RATING_SIZE_MAX, SMALL_SCHOOL_COEF,
 )
 from components.criteria import criteria_html
@@ -402,23 +403,37 @@ with tab_rating:
         board["Коэф."] = board["Размер"].map(rating_coefficient)
         board["С корр."] = [adjusted_rating(r, n)
                             for r, n in zip(board["Рейтинг"], board["Размер"])]
-        board = board.sort_values("С корр.", ascending=False, na_position="last")
+
+        # Надбавка за чек-лист руководителя кластера
+        try:
+            card = load_scorecard()
+            marks = dict(zip(card["data"]["Школа"], card["data"]["Отмечено"]))
+            n_crit = len(card["criteria"])
+        except Exception:
+            marks, n_crit = {}, 0
+        board["Галочек"] = board["Школа"].map(lambda x: int(marks.get(x, 0)))
+        board["Итог"] = [final_rating(r, n, c) for r, n, c
+                         in zip(board["Рейтинг"], board["Размер"], board["Галочек"])]
+        board = board.sort_values("Итог", ascending=False, na_position="last")
 
         small = int((board["Коэф."] == SMALL_SCHOOL_COEF).sum())
         c1, c2, c3 = st.columns(3)
         c1.metric("Школ в потоке", len(board))
         c2.metric("Под коэффициентом", small)
         c3.metric("Лидер", board.iloc[0]["Школа"][:22] if len(board) else "—",
-                  f"{board.iloc[0]['С корр.']:.2f}" if pd.notna(board.iloc[0]["С корр."]) else "—")
+                  f"{board.iloc[0]['Итог']:.2f}" if pd.notna(board.iloc[0]["Итог"]) else "—")
 
         st.dataframe(
             board[["Школа", "Старт", "Финиш", "Размер", "Отзывов",
-                   "Рейтинг", "Коэф.", "С корр."]],
+                   "Рейтинг", "Коэф.", "С корр.", "Галочек", "Итог"]],
             use_container_width=True, hide_index=True,
         )
         st.caption(
-            "«Рейтинг» — средняя оценка НПС без поправки, она же видна школам. "
-            "«С корр.» — с учётом размера, по ней и сравниваем."
+            f"«Рейтинг» — средняя оценка НПС, она же видна школам. «С корр.» — "
+            f"с поправкой на размер. «Итог» = «С корр.» + {CRITERION_BONUS} за каждую "
+            f"закрытую галочку чек-листа"
+            + (f" (из {n_crit} возможных, максимум +{CRITERION_BONUS * n_crit:.1f})."
+               if n_crit else ".")
         )
 
     st.divider()

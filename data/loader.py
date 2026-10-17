@@ -959,6 +959,26 @@ def adjusted_rating(score, students):
     return round(float(score) * rating_coefficient(students), 2)
 
 
+# Каждый закрытый пункт чек-листа руководителя кластера добавляет к итогу.
+# Это надбавка за работу школы, а не часть оценки учеников, поэтому она
+# прибавляется к уже скорректированному рейтингу, а не умножается на коэффициент.
+CRITERION_BONUS = 0.1
+
+
+def final_rating(score, students, checks):
+    """
+    Итоговый рейтинг школы: NPS × коэффициент размера + 0.1 за каждую галочку.
+
+    checks — сколько пунктов чек-листа закрыто. Если оценки учеников нет,
+    возвращаем None: надбавка сама по себе рейтингом не является.
+    """
+    base = adjusted_rating(score, students)
+    if base is None:
+        return None
+    bonus = CRITERION_BONUS * int(checks or 0)
+    return round(base + bonus, 2)
+
+
 def get_school_rating(ratings: pd.DataFrame, school_name: str) -> dict | None:
     """Return {"score": float, "count": int} for a school, or None if no data."""
     row = ratings[ratings["Школа"] == school_name]
